@@ -1,667 +1,677 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 
-// Konstanta untuk kunci localStorage
-const DB_KEY = 'classSchedulerDb';
-
-// --- DATA AWAL ---
-// Data ini akan digunakan hanya jika tidak ada data di localStorage
-const getInitialData = () => {
-  return {
-    users: [
-      { id: 'superadmin', username: 'superadmin', password: 'superadmin', role: 'superadmin', approved: true },
-      { id: 'admin1', username: 'admin', password: 'password', role: 'admin', approved: true },
-      { id: 'user1', username: 'budi', password: 'password', role: 'user', kelas: 'X-A', approved: true },
-    ],
-    schedules: [
-      { id: 1, kelas: 'X-A', day: 'Senin', time: '07:00 - 08:30', subject: 'Matematika', teacher: 'Ibu Siti' },
-      { id: 2, kelas: 'X-A', day: 'Senin', time: '08:30 - 10:00', subject: 'Bahasa Indonesia', teacher: 'Bapak Agus' },
-      { id: 3, kelas: 'XI-B', day: 'Selasa', time: '10:15 - 11:45', subject: 'Fisika', teacher: 'Bapak Eko' },
-    ],
-    notes: [
-        { id: 1, userId: 'user1', scheduleId: 1, day: 'Senin', content: 'Jangan lupa bawa PR Matematika halaman 50.' }
-    ],
-    tasks: [
-        { id: 1, kelas: 'X-A', title: 'Tugas Sejarah Bab 5', description: 'Rangkum Bab 5 tentang Kerajaan Majapahit. Kumpulkan minggu depan.', dueDate: '2025-10-10' }
-    ],
-    notifications: [
-        { id: 1, userId: 'user1', message: 'Tugas baru ditambahkan untuk kelas Anda: Tugas Sejarah Bab 5', read: false }
-    ],
-  };
-};
-
-// --- KOMPONEN UTAMA: App ---
-const App = () => {
-  // --- STATE MANAGEMENT ---
-  const [db, setDb] = useState(() => {
-    try {
-      const localData = localStorage.getItem(DB_KEY);
-      return localData ? JSON.parse(localData) : getInitialData();
-    } catch (error) {
-      console.error("Error parsing localStorage data:", error);
-      return getInitialData();
-    }
-  });
-
-  const [loggedInUser, setLoggedInUser] = useState(null);
-  const [currentPage, setCurrentPage] = useState('login');
-  const [backgroundPosition, setBackgroundPosition] = useState('0% 50%');
-
-  // Efek untuk sinkronisasi DB ke localStorage setiap kali ada perubahan
-  useEffect(() => {
-    try {
-      localStorage.setItem(DB_KEY, JSON.stringify(db));
-    } catch (error) {
-      console.error("Error saving to localStorage:", error);
-    }
-  }, [db]);
-    
-  // Efek untuk animasi background
-  useEffect(() => {
-    const positions = ['0% 50%', '25% 50%', '50% 50%', '75% 50%', '100% 50%'];
-    const newPosition = positions[Math.floor(Math.random() * positions.length)];
-    setBackgroundPosition(newPosition);
-  }, [currentPage]);
-
-
-  // --- FUNGSI AUTENTIKASI ---
-  const handleLogin = (username, password) => {
-    const user = db.users.find(u => u.username === username && u.password === password);
-    if (user) {
-      if (!user.approved) {
-        alert('Akun Anda belum disetujui oleh Super Admin.');
-        return;
-      }
-      setLoggedInUser(user);
-      setCurrentPage('dashboard');
-    } else {
-      alert('Username atau password salah.');
-    }
-  };
-
-  const handleLogout = () => {
-    setLoggedInUser(null);
-    setCurrentPage('login');
-  };
-
-  const handleRegister = (username, password, role, kelas) => {
-    if (db.users.some(u => u.username === username)) {
-      alert('Username sudah digunakan.');
-      return false;
-    }
-    
-    const newUser = {
-      id: `user-${Date.now()}`,
-      username,
-      password,
-      role,
-      kelas: role === 'user' ? kelas : null,
-      approved: role === 'user', // User langsung disetujui, admin butuh persetujuan
-    };
-
-    setDb(prevDb => ({ ...prevDb, users: [...prevDb.users, newUser] }));
-    alert(role === 'user' ? 'Registrasi berhasil! Silakan login.' : 'Registrasi admin berhasil! Menunggu persetujuan Super Admin.');
-    return true;
-  };
-  
-  // --- FUNGSI HELPER ---
-  const createNotification = (targetKelas, message) => {
-      const targetUsers = db.users.filter(u => u.role === 'user' && u.kelas === targetKelas);
-      const newNotifications = targetUsers.map(user => ({
-          id: `notif-${Date.now()}-${user.id}`,
-          userId: user.id,
-          message,
-          read: false,
-      }));
-      setDb(prevDb => ({ ...prevDb, notifications: [...prevDb.notifications, ...newNotifications] }));
-  };
-
-
-  // --- RENDER HALAMAN ---
-  const renderPage = () => {
-    if (loggedInUser) {
-        switch(loggedInUser.role) {
-            case 'user':
-                return <UserDashboard user={loggedInUser} db={db} setDb={setDb} onLogout={handleLogout} />;
-            case 'admin':
-            case 'superadmin':
-                return <AdminDashboard user={loggedInUser} db={db} setDb={setDb} onLogout={handleLogout} createNotification={createNotification}/>;
-            default:
-                setCurrentPage('login');
-                return null;
-        }
-    } else {
-        switch (currentPage) {
-            case 'login':
-                return <LoginPage onLogin={handleLogin} onNavigate={setCurrentPage} />;
-            case 'register':
-                return <RegisterPage onRegister={handleRegister} onNavigate={setCurrentPage} />;
-            default:
-                return <LoginPage onLogin={handleLogin} onNavigate={setCurrentPage} />;
-        }
-    }
-  };
-
-  return (
-    <div className="min-h-screen font-sans bg-green-50 text-gray-800 relative overflow-hidden">
-      <div 
-        className="absolute inset-0 bg-cover bg-center transition-all duration-1000 ease-in-out"
-        style={{
-          backgroundImage: "url('https://images.unsplash.com/photo-1448375240586-882707db888b?q=80&w=2070&auto=format&fit=crop')",
-          backgroundPosition: backgroundPosition,
-          filter: 'blur(3px) brightness(0.8)',
-          transform: 'scale(1.1)'
-        }}
-      ></div>
-      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen p-4">
-        {renderPage()}
-      </div>
-    </div>
-  );
-};
-
-// --- KOMPONEN: Logo ---
-const AppLogo = () => (
-  <div className="flex items-center gap-3 mb-6">
-    <svg width="48" height="48" viewBox="0 0 24 24" className="text-green-600">
-      <path fill="currentColor" d="M12.83 2.11a1 1 0 0 0-1.66 0L3.5 10.35a1 1 0 0 0-.17.89l1.79 8.94a1 1 0 0 0 .97.82h12.82a1 1 0 0 0 .97-.82l1.79-8.94a1 1 0 0 0-.17-.89L12.83 2.11ZM12 4.41l5.77 5.77l-1 5H7.23l-1-5L12 4.41Zm-3.17 7.09h1.92v3.5H8.83v-3.5Zm4.34 0h1.92v3.5h-1.92v-3.5Zm-2.17-2.5h1.92v3h-1.92v-3Z"/>
-    </svg>
-    <h1 className="text-3xl font-bold text-white tracking-wider" style={{textShadow: '1px 1px 3px rgba(0,0,0,0.5)'}}>Jadwal Hijau</h1>
-  </div>
+// --- SVG ICON COMPONENTS ---
+const TreeLogo = () => (
+  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-green-600">
+    <path d="M17.32 10H6.68L4 14H20L17.32 10Z" fill="currentColor" opacity="0.4"/>
+    <path d="M15.46 5H8.54L6.68 10H17.32L15.46 5Z" fill="currentColor" opacity="0.7"/>
+    <path d="M12 2L10 5H14L12 2Z" fill="currentColor"/>
+    <path d="M11 14H13V22H11V14Z" fill="currentColor" opacity="0.6"/>
+    <path d="M18.66 12H5.34C4.8 12 4.41 12.54 4.58 13.04L6.58 19.04C6.75 19.54 7.2 20 7.72 20H16.28C16.8 20 17.25 19.54 17.42 19.04L19.42 13.04C19.59 12.54 19.2 12 18.66 12Z" fill="currentColor"/>
+  </svg>
 );
 
-// --- KOMPONEN: LoginPage ---
-const LoginPage = ({ onLogin, onNavigate }) => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!username || !password) {
-        alert("Username dan password harus diisi.");
-        return;
-    }
-    onLogin(username, password);
-  };
-
-  return (
-    <div className="w-full max-w-md bg-white/80 backdrop-blur-sm rounded-2xl shadow-2xl p-8 transition-transform transform hover:scale-105 duration-300">
-      <AppLogo />
-      <h2 className="text-2xl font-semibold text-center text-green-800 mb-6">Selamat Datang Kembali</h2>
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Username</label>
-          <input
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="mt-1 block w-full px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
-            placeholder="Masukkan username Anda"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 block w-full px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
-            placeholder="Masukkan password Anda"
-          />
-        </div>
-        <button type="submit" className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg transition duration-300 transform hover:-translate-y-1">
-          Login
-        </button>
-      </form>
-      <p className="mt-6 text-center text-sm">
-        Belum punya akun?{' '}
-        <button onClick={() => onNavigate('register')} className="font-medium text-green-700 hover:text-green-800 underline">
-          Daftar di sini
-        </button>
-      </p>
+const NotificationIcon = ({ hasNotification }) => (
+    <div className="relative">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-600">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+        {hasNotification && <span className="absolute top-0 right-0 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"></span>}
     </div>
-  );
-};
+);
 
-// --- KOMPONEN: RegisterPage ---
-const RegisterPage = ({ onRegister, onNavigate }) => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [role, setRole] = useState('user');
-  const [kelas, setKelas] = useState('X-A');
-
-  const kelasOptions = useMemo(() => {
-    const grades = ['X', 'XI', 'XII'];
-    const letters = 'ABCDEFGHIJKL'.split('');
-    let options = [];
-    grades.forEach(grade => {
-      letters.forEach(letter => {
-        options.push(`${grade}-${letter}`);
-      });
-    });
-    return options;
-  }, []);
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!username || !password) {
-        alert("Semua field harus diisi.");
-        return;
-    }
-    const success = onRegister(username, password, role, kelas);
-    if(success) {
-        onNavigate('login');
-    }
-  };
-
-  return (
-    <div className="w-full max-w-md bg-white/80 backdrop-blur-sm rounded-2xl shadow-2xl p-8 transition-transform transform hover:scale-105 duration-300">
-      <AppLogo />
-      <h2 className="text-2xl font-semibold text-center text-green-800 mb-6">Buat Akun Baru</h2>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Username</label>
-          <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="mt-1 block w-full px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Password</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="mt-1 block w-full px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Daftar sebagai</label>
-          <select value={role} onChange={(e) => setRole(e.target.value)} className="mt-1 block w-full px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500">
-            <option value="user">User (Siswa)</option>
-            <option value="admin">Admin</option>
-          </select>
-        </div>
-        {role === 'user' && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Pilih Kelas</label>
-            <select value={kelas} onChange={(e) => setKelas(e.target.value)} className="mt-1 block w-full px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500">
-              {kelasOptions.map(k => <option key={k} value={k}>{k}</option>)}
-            </select>
-          </div>
-        )}
-        <button type="submit" className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg transition duration-300 transform hover:-translate-y-1">
-          Register
-        </button>
-      </form>
-      <p className="mt-6 text-center text-sm">
-        Sudah punya akun?{' '}
-        <button onClick={() => onNavigate('login')} className="font-medium text-green-700 hover:text-green-800 underline">
-          Login di sini
-        </button>
-      </p>
-    </div>
-  );
-};
-
-// --- KOMPONEN: UserDashboard ---
-const UserDashboard = ({ user, db, setDb, onLogout }) => {
-    const [view, setView] = useState('schedule'); // schedule, tasks
-    const [selectedDay, setSelectedDay] = useState('Senin');
-    const [noteContent, setNoteContent] = useState('');
-    const [editingNote, setEditingNote] = useState(null);
-    const [showModal, setShowModal] = useState(false);
-
-    const userSchedule = useMemo(() => db.schedules.filter(s => s.kelas === user.kelas), [db.schedules, user.kelas]);
-    const userTasks = useMemo(() => db.tasks.filter(t => t.kelas === user.kelas), [db.tasks, user.kelas]);
-    const userNotifications = useMemo(() => db.notifications.filter(n => n.userId === user.id && !n.read), [db.notifications, user.id]);
-    
-    const days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
-
-    const handleOpenNoteModal = (scheduleItem) => {
-        const existingNote = db.notes.find(n => n.userId === user.id && n.scheduleId === scheduleItem.id);
-        setEditingNote(scheduleItem);
-        setNoteContent(existingNote ? existingNote.content : '');
-        setShowModal(true);
-    };
-    
-    const handleSaveNote = () => {
-        if (!editingNote) return;
-
-        setDb(prevDb => {
-            const existingNoteIndex = prevDb.notes.findIndex(n => n.userId === user.id && n.scheduleId === editingNote.id);
-            let newNotes = [...prevDb.notes];
-            if (existingNoteIndex > -1) {
-                if (noteContent.trim() === '') {
-                    // Hapus note jika konten kosong
-                    newNotes.splice(existingNoteIndex, 1);
-                } else {
-                    // Update note
-                    newNotes[existingNoteIndex].content = noteContent;
-                }
-            } else if (noteContent.trim() !== '') {
-                // Tambah note baru
-                newNotes.push({
-                    id: `note-${Date.now()}`,
-                    userId: user.id,
-                    scheduleId: editingNote.id,
-                    day: editingNote.day,
-                    content: noteContent
-                });
+// --- INITIAL DATABASE SETUP ---
+const useDatabase = () => {
+    const initializeData = () => {
+        console.log("Initializing database for the first time...");
+        const initialUsers = [
+            { id: 1, username: 'superadmin', password: 'superadmin', role: 'admin', approved: true },
+            { id: 2, username: 'XI-A_user', password: 'password', role: 'user', className: 'XI-A', approved: true },
+        ];
+        const initialSchedules = {
+            'XI-A': {
+                Senin: [{ start: '07:00', end: '08:30', subject: 'Matematika' }, { start: '08:30', end: '10:00', subject: 'Fisika' }],
+                Selasa: [{ start: '07:00', end: '08:30', subject: 'Kimia' }],
             }
-            return { ...prevDb, notes: newNotes };
-        });
+        };
+        const initialAssignments = [
+            { id: 1, title: 'Tugas Kalkulus', content: 'Kerjakan LKS hal 50.', className: 'XI-A', createdAt: new Date().toISOString() }
+        ];
+        const initialNotes = [
+            { id: 1, userId: 2, date: 'Senin', content: 'Jangan lupa bawa kalkulator.' }
+        ];
 
-        setShowModal(false);
-        setEditingNote(null);
-        setNoteContent('');
+        localStorage.setItem('users', JSON.stringify(initialUsers));
+        localStorage.setItem('schedules', JSON.stringify(initialSchedules));
+        localStorage.setItem('assignments', JSON.stringify(initialAssignments));
+        localStorage.setItem('notes', JSON.stringify(initialNotes));
+        localStorage.setItem('pendingAdmins', JSON.stringify([]));
+        localStorage.setItem('lastLoginTimestamps', JSON.stringify({}));
+        
+        return { users: initialUsers, schedules: initialSchedules, assignments: initialAssignments, notes: initialNotes, pendingAdmins: [] };
+    };
+
+    const loadData = (key, defaultValue = []) => {
+        try {
+            const data = localStorage.getItem(key);
+            return data ? JSON.parse(data) : defaultValue;
+        } catch (error) {
+            console.error(`Error loading ${key} from localStorage`, error);
+            return defaultValue;
+        }
     };
     
-    const handleMarkNotifAsRead = () => {
-        setDb(prevDb => {
-            const newNotifications = prevDb.notifications.map(n => 
-                n.userId === user.id ? { ...n, read: true } : n
-            );
-            return { ...prevDb, notifications: newNotifications };
-        });
+    const [db, setDb] = useState(() => {
+        const isInitialized = localStorage.getItem('users');
+        if (!isInitialized) {
+            return initializeData();
+        }
+        return {
+            users: loadData('users'),
+            schedules: loadData('schedules', {}),
+            assignments: loadData('assignments'),
+            notes: loadData('notes'),
+            pendingAdmins: loadData('pendingAdmins'),
+        };
+    });
+
+    const updateDb = (key, data) => {
+        localStorage.setItem(key, JSON.stringify(data));
+        setDb(prevDb => ({ ...prevDb, [key]: data }));
     };
 
-
-    return (
-        <div className="w-full max-w-4xl bg-white/90 backdrop-blur-md rounded-2xl shadow-2xl p-6 space-y-4">
-            <header className="flex justify-between items-center pb-4 border-b border-green-200">
-                <div>
-                    <h2 className="text-2xl font-bold text-green-800">Dashboard Siswa</h2>
-                    <p className="text-gray-600">Selamat datang, {user.username}! | Kelas: {user.kelas}</p>
-                </div>
-                <div className="flex items-center gap-4">
-                    <div className="relative">
-                        <button onClick={handleMarkNotifAsRead} className="relative">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-700" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-                            {userNotifications.length > 0 && 
-                                <span className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white">{userNotifications.length}</span>
-                            }
-                        </button>
-                         {userNotifications.length > 0 && (
-                            <div className="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg p-2 z-20 text-sm">
-                                <h3 className="font-bold p-1">Notifikasi Baru</h3>
-                                {userNotifications.map(n => <p key={n.id} className="p-1 border-b">{n.message}</p>)}
-                            </div>
-                        )}
-                    </div>
-                    <button onClick={onLogout} className="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-300">Logout</button>
-                </div>
-            </header>
-
-            <nav className="flex gap-2 p-2 bg-green-100 rounded-lg">
-                <button onClick={() => setView('schedule')} className={`flex-1 py-2 rounded-md font-semibold transition ${view === 'schedule' ? 'bg-green-600 text-white shadow' : 'bg-transparent text-green-700 hover:bg-green-200'}`}>Jadwal</button>
-                <button onClick={() => setView('tasks')} className={`flex-1 py-2 rounded-md font-semibold transition ${view === 'tasks' ? 'bg-green-600 text-white shadow' : 'bg-transparent text-green-700 hover:bg-green-200'}`}>Tugas</button>
-            </nav>
-
-            {view === 'schedule' && (
-                <div>
-                    <div className="flex justify-center gap-1 my-4 flex-wrap">
-                        {days.map(day => (
-                            <button key={day} onClick={() => setSelectedDay(day)} className={`px-4 py-2 text-sm rounded-full font-semibold transition ${selectedDay === day ? 'bg-green-700 text-white shadow-md' : 'bg-white text-green-800 hover:bg-green-100'}`}>{day}</button>
-                        ))}
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {userSchedule.filter(s => s.day === selectedDay).sort((a,b) => a.time.localeCompare(b.time)).map(s => {
-                             const note = db.notes.find(n => n.userId === user.id && n.scheduleId === s.id);
-                             return (
-                                <div key={s.id} className="bg-white rounded-lg p-4 shadow-md border-l-4 border-green-500">
-                                    <p className="font-bold text-lg text-green-800">{s.subject}</p>
-                                    <p className="text-gray-600">{s.time}</p>
-                                    <p className="text-gray-500 text-sm">{s.teacher}</p>
-                                    <div className="mt-3 pt-3 border-t">
-                                        <button onClick={() => handleOpenNoteModal(s)} className={`w-full text-left text-sm font-semibold flex items-center gap-2 ${note ? 'text-yellow-600' : 'text-gray-500'}`}>
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z" /></svg>
-                                            {note ? 'Lihat/Edit Catatan' : 'Tambah Catatan'}
-                                        </button>
-                                        {note && <p className="mt-2 text-xs p-2 bg-yellow-100 rounded-md text-yellow-800 italic">"{note.content}"</p>}
-                                    </div>
-                                </div>
-                             );
-                        })}
-                    </div>
-                </div>
-            )}
-            
-            {view === 'tasks' && (
-                <div className="space-y-4">
-                    {userTasks.map(task => (
-                        <div key={task.id} className="bg-white rounded-lg p-4 shadow-md border-l-4 border-blue-500">
-                            <p className="font-bold text-lg text-blue-800">{task.title}</p>
-                            <p className="text-gray-700 my-2">{task.description}</p>
-                            <p className="text-sm font-semibold text-red-600">Tenggat: {new Date(task.dueDate).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                        </div>
-                    ))}
-                    {userTasks.length === 0 && <p className="text-center text-gray-500 py-4">Tidak ada tugas untuk saat ini.</p>}
-                </div>
-            )}
-            
-             {showModal && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
-                        <h3 className="text-xl font-bold mb-4 text-green-800">Catatan untuk {editingNote?.subject}</h3>
-                        <textarea
-                            value={noteContent}
-                            onChange={(e) => setNoteContent(e.target.value)}
-                            className="w-full h-32 p-2 border rounded-md focus:ring-2 focus:ring-green-500"
-                            placeholder="Tulis catatan pribadi Anda di sini..."
-                        ></textarea>
-                        <div className="mt-4 flex justify-end gap-2">
-                            <button onClick={() => setShowModal(false)} className="px-4 py-2 bg-gray-200 rounded-md font-semibold hover:bg-gray-300">Batal</button>
-                            <button onClick={handleSaveNote} className="px-4 py-2 bg-green-600 text-white rounded-md font-semibold hover:bg-green-700">Simpan</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
+    return { db, updateDb };
 };
 
-// --- KOMPONEN: AdminDashboard ---
-const AdminDashboard = ({ user, db, setDb, onLogout, createNotification }) => {
-    const [view, setView] = useState('schedules'); // schedules, tasks, notes, approvals
-    
-    // State untuk form
-    const [formState, setFormState] = useState({});
-    const [isEditing, setIsEditing] = useState(null); // id item yg diedit
-    
-    const kelasOptions = useMemo(() => {
+
+// --- MAIN APP COMPONENT ---
+export default function App() {
+    const { db, updateDb } = useDatabase();
+    const [currentUser, setCurrentUser] = useState(null);
+    const [page, setPage] = useState('login'); // login, admin, user
+    const [backgroundPos, setBackgroundPos] = useState(0);
+
+    const CLASS_LIST = useMemo(() => {
         const grades = ['X', 'XI', 'XII'];
-        const letters = 'ABCDEFGHIJKL'.split('');
-        let options = [];
-        grades.forEach(grade => letters.forEach(letter => options.push(`${grade}-${letter}`)));
-        return options;
+        const majors = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+        return grades.flatMap(grade => majors.map(major => `${grade}-${major}`));
     }, []);
 
-    const handleCrud = (action, type, data) => {
-        setDb(prevDb => {
-            let newCollection = [...prevDb[type]];
-            let message = '';
+    const DAYS = useMemo(() => ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'], []);
+
+    // Session check on initial load
+    useEffect(() => {
+        const sessionUser = sessionStorage.getItem('currentUser');
+        if (sessionUser) {
+            const user = JSON.parse(sessionUser);
+            setCurrentUser(user);
+            setPage(user.role);
+        }
+    }, []);
+
+    const navigate = (newPage) => {
+        setPage(newPage);
+        setBackgroundPos(prev => prev - 100); // Move background on page change
+    };
+
+    // --- AUTHENTICATION HANDLERS ---
+    const handleLogin = ({ username, password }) => {
+        const user = db.users.find(u => u.username === username && u.password === password);
+        if (user && user.approved) {
+            setCurrentUser(user);
+            sessionStorage.setItem('currentUser', JSON.stringify(user));
             
-            switch(action) {
-                case 'add':
-                    newCollection.push({ ...data, id: `${type}-${Date.now()}`});
-                    message = type === 'schedules' ? 
-                        `Jadwal baru (${data.subject}) telah ditambahkan untuk kelas ${data.kelas}` : 
-                        `Tugas baru (${data.title}) telah ditambahkan untuk kelas ${data.kelas}`;
-                    createNotification(data.kelas, message);
-                    break;
-                case 'edit':
-                    const index = newCollection.findIndex(item => item.id === isEditing);
-                    if(index > -1) {
-                        const oldItem = newCollection[index];
-                        newCollection[index] = { ...oldItem, ...data };
-                        message = type === 'schedules' ? 
-                            `Ada perubahan jadwal untuk kelas ${data.kelas} pada hari ${data.day}`:
-                            `Tugas "${data.title}" untuk kelas ${data.kelas} telah diperbarui`;
-                        createNotification(data.kelas, message);
-                    }
-                    break;
-                case 'delete':
-                    const itemToDelete = prevDb[type].find(item => item.id === data.id);
-                    newCollection = newCollection.filter(item => item.id !== data.id);
-                    message = `Jadwal/Tugas untuk kelas ${itemToDelete.kelas} telah dihapus.`;
-                    createNotification(itemToDelete.kelas, message);
-                    break;
-                default: break;
-            }
-            return { ...prevDb, [type]: newCollection };
-        });
-        setIsEditing(null);
-        setFormState({});
+            const timestamps = JSON.parse(localStorage.getItem('lastLoginTimestamps') || '{}');
+            timestamps[user.id] = new Date().toISOString();
+            localStorage.setItem('lastLoginTimestamps', JSON.stringify(timestamps));
+            
+            navigate(user.role);
+            return true;
+        }
+        alert('Username atau password salah, atau akun belum disetujui.');
+        return false;
     };
     
-    const handleApproveAdmin = (adminId) => {
-        setDb(prevDb => {
-            const newUsers = prevDb.users.map(u => u.id === adminId ? { ...u, approved: true } : u);
-            return { ...prevDb, users: newUsers };
-        });
+    const handleRegister = ({ username, password, className, role }) => {
+        if (db.users.some(u => u.username === username) || db.pendingAdmins.some(u => u.username === username)) {
+            alert('Username sudah digunakan.');
+            return false;
+        }
+        
+        const newUser = {
+            id: Date.now(),
+            username,
+            password,
+            role,
+            className: role === 'user' ? className : null,
+            approved: role === 'user' // Users are auto-approved
+        };
+
+        if (role === 'user') {
+            updateDb('users', [...db.users, newUser]);
+            alert('Registrasi user berhasil! Silakan login.');
+        } else { // Admin registration
+            updateDb('pendingAdmins', [...db.pendingAdmins, newUser]);
+            alert('Registrasi admin berhasil. Menunggu persetujuan dari Super Admin.');
+        }
+        return true;
     };
 
-    const startEdit = (item, type) => {
-        setIsEditing(item.id);
-        setFormState(item);
-        window.scrollTo(0, 0); // scroll to top to see the form
+    const handleLogout = () => {
+        setCurrentUser(null);
+        sessionStorage.removeItem('currentUser');
+        navigate('login');
     };
+    
+    // --- NOTIFICATION LOGIC ---
+    const [hasNotification, setHasNotification] = useState(false);
+    useEffect(() => {
+        if (currentUser && currentUser.role === 'user') {
+            const timestamps = JSON.parse(localStorage.getItem('lastLoginTimestamps') || '{}');
+            const lastLogin = timestamps[currentUser.id] || new Date(0).toISOString();
+            
+            const newAssignments = db.assignments.some(a => a.className === currentUser.className && a.createdAt > lastLogin);
+            // In a real app, schedule changes would be tracked. Here we simplify.
+            // For now, we'll just check for assignments.
+            if (newAssignments) {
+                setHasNotification(true);
+            }
+        }
+    }, [currentUser, db.assignments]);
 
-    const renderForm = (type) => {
-        if (type === 'schedules') {
-            return (
-                <form onSubmit={(e) => { e.preventDefault(); handleCrud(isEditing ? 'edit' : 'add', 'schedules', formState);}} className="bg-green-50 p-4 rounded-lg space-y-3 mb-6 shadow-inner">
-                    <h3 className="text-lg font-bold text-green-800">{isEditing ? 'Edit Jadwal' : 'Tambah Jadwal Baru'}</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <select required value={formState.kelas || ''} onChange={e => setFormState({...formState, kelas: e.target.value})} className="p-2 border rounded">
-                            <option value="">Pilih Kelas</option>
-                            {kelasOptions.map(k => <option key={k} value={k}>{k}</option>)}
-                        </select>
-                        <select required value={formState.day || ''} onChange={e => setFormState({...formState, day: e.target.value})} className="p-2 border rounded">
-                           <option value="">Pilih Hari</option>
-                           {['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'].map(d => <option key={d} value={d}>{d}</option>)}
-                        </select>
-                        <input type="text" required placeholder="Waktu (e.g., 07:00 - 08:30)" value={formState.time || ''} onChange={e => setFormState({...formState, time: e.target.value})} className="p-2 border rounded"/>
-                    </div>
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <input type="text" required placeholder="Mata Pelajaran" value={formState.subject || ''} onChange={e => setFormState({...formState, subject: e.target.value})} className="p-2 border rounded"/>
-                        <input type="text" required placeholder="Nama Guru" value={formState.teacher || ''} onChange={e => setFormState({...formState, teacher: e.target.value})} className="p-2 border rounded"/>
-                    </div>
-                    <div className="flex gap-2">
-                        <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded font-semibold hover:bg-green-700">{isEditing ? 'Update' : 'Tambah'}</button>
-                        {isEditing && <button type="button" onClick={() => { setIsEditing(null); setFormState({}); }} className="bg-gray-300 px-4 py-2 rounded font-semibold">Batal</button>}
-                    </div>
-                </form>
-            );
+
+    const renderPage = () => {
+        switch (page) {
+            case 'admin':
+                return <AdminDashboard 
+                            currentUser={currentUser} 
+                            db={db} 
+                            updateDb={updateDb} 
+                            CLASS_LIST={CLASS_LIST} 
+                            DAYS={DAYS} 
+                            onLogout={handleLogout} 
+                        />;
+            case 'user':
+                return <UserDashboard 
+                            currentUser={currentUser} 
+                            db={db} 
+                            updateDb={updateDb} 
+                            DAYS={DAYS} 
+                            onLogout={handleLogout} 
+                            hasNotification={hasNotification}
+                            setHasNotification={setHasNotification}
+                        />;
+            default:
+                return <LoginPage onLogin={handleLogin} onRegister={handleRegister} CLASS_LIST={CLASS_LIST} />;
         }
-        if (type === 'tasks') {
-            return (
-                 <form onSubmit={(e) => { e.preventDefault(); handleCrud(isEditing ? 'edit' : 'add', 'tasks', formState);}} className="bg-blue-50 p-4 rounded-lg space-y-3 mb-6 shadow-inner">
-                    <h3 className="text-lg font-bold text-blue-800">{isEditing ? 'Edit Tugas' : 'Tambah Tugas Baru'}</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <select required value={formState.kelas || ''} onChange={e => setFormState({...formState, kelas: e.target.value})} className="p-2 border rounded">
-                            <option value="">Pilih Kelas</option>
-                            {kelasOptions.map(k => <option key={k} value={k}>{k}</option>)}
-                        </select>
-                         <input type="text" required placeholder="Judul Tugas" value={formState.title || ''} onChange={e => setFormState({...formState, title: e.target.value})} className="p-2 border rounded"/>
-                         <input type="date" required value={formState.dueDate || ''} onChange={e => setFormState({...formState, dueDate: e.target.value})} className="p-2 border rounded"/>
-                    </div>
-                    <textarea placeholder="Deskripsi Tugas" required value={formState.description || ''} onChange={e => setFormState({...formState, description: e.target.value})} className="w-full p-2 border rounded h-24"></textarea>
-                    <div className="flex gap-2">
-                        <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded font-semibold hover:bg-blue-700">{isEditing ? 'Update' : 'Tambah'}</button>
-                        {isEditing && <button type="button" onClick={() => { setIsEditing(null); setFormState({}); }} className="bg-gray-300 px-4 py-2 rounded font-semibold">Batal</button>}
-                    </div>
-                </form>
-            );
-        }
-        return null;
     };
 
     return (
-        <div className="w-full max-w-6xl bg-white/90 backdrop-blur-md rounded-2xl shadow-2xl p-6 space-y-4">
-            <header className="flex justify-between items-center pb-4 border-b border-green-200">
-                <div>
-                    <h2 className="text-2xl font-bold text-green-800">{user.role === 'superadmin' ? 'Dashboard Super Admin' : 'Dashboard Admin'}</h2>
-                    <p className="text-gray-600">Selamat datang, {user.username}!</p>
+        <div className="min-h-screen bg-green-50 font-sans text-gray-800">
+            <div 
+                className="fixed inset-0 z-0 bg-cover bg-center transition-transform duration-1000 ease-in-out"
+                style={{
+                    backgroundImage: "url('https://images.unsplash.com/photo-1441974231531-c6227db76b6e?q=80&w=2560&auto=format&fit=crop')",
+                    transform: `translateX(${backgroundPos}px)`
+                }}
+            ></div>
+            <div className="fixed inset-0 bg-black/30 z-0"></div>
+
+            <main className="relative z-10 p-4 sm:p-6 md:p-8">
+                {renderPage()}
+            </main>
+        </div>
+    );
+}
+
+// --- LOGIN & REGISTRATION PAGE ---
+function LoginPage({ onLogin, onRegister, CLASS_LIST }) {
+    const [isRegister, setIsRegister] = useState(false);
+    const [form, setForm] = useState({ username: '', password: '', className: CLASS_LIST[0], role: 'user' });
+    const [confirmPassword, setConfirmPassword] = useState('');
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setForm(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        if (isRegister) {
+            if (form.password !== confirmPassword) {
+                alert("Password tidak cocok!");
+                return;
+            }
+            if(onRegister(form)) {
+                setIsRegister(false);
+                setForm({ username: '', password: '', className: CLASS_LIST[0], role: 'user' });
+                setConfirmPassword('');
+            }
+        } else {
+            onLogin(form);
+        }
+    };
+
+    return (
+        <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)]">
+            <div className="w-full max-w-md p-8 space-y-6 bg-white/80 backdrop-blur-md rounded-2xl shadow-2xl">
+                <div className="flex justify-center">
+                    <TreeLogo />
                 </div>
-                <button onClick={onLogout} className="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-300">Logout</button>
-            </header>
+                <h2 className="text-center text-3xl font-extrabold text-gray-900">{isRegister ? 'Buat Akun Baru' : 'Selamat Datang'}</h2>
+                
+                <form className="space-y-6" onSubmit={handleSubmit}>
+                    <div className="space-y-4 rounded-md shadow-sm">
+                        <input name="username" type="text" required value={form.username} onChange={handleChange} className="w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500" placeholder="Username" />
+                        <input name="password" type="password" required value={form.password} onChange={handleChange} className="w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500" placeholder="Password" />
+                        {isRegister && (
+                            <>
+                                <input name="confirmPassword" type="password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500" placeholder="Konfirmasi Password" />
+                                <div className="flex items-center space-x-4">
+                                    <label><input type="radio" name="role" value="user" checked={form.role === 'user'} onChange={handleChange} /> User</label>
+                                    <label><input type="radio" name="role" value="admin" checked={form.role === 'admin'} onChange={handleChange} /> Admin</label>
+                                </div>
+                                {form.role === 'user' && (
+                                    <select name="className" value={form.className} onChange={handleChange} className="w-full px-3 py-2 border border-gray-300 text-gray-900 rounded-md focus:outline-none focus:ring-green-500 focus:border-green-500">
+                                        {CLASS_LIST.map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                )}
+                            </>
+                        )}
+                    </div>
+                    <button type="submit" className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-150 ease-in-out">
+                        {isRegister ? 'Daftar' : 'Login'}
+                    </button>
+                </form>
 
-            <nav className="flex gap-2 p-2 bg-green-100 rounded-lg flex-wrap">
-                <button onClick={() => setView('schedules')} className={`flex-1 py-2 px-3 rounded-md font-semibold transition text-sm ${view === 'schedules' ? 'bg-green-600 text-white shadow' : 'bg-transparent text-green-700 hover:bg-green-200'}`}>Kelola Jadwal</button>
-                <button onClick={() => setView('tasks')} className={`flex-1 py-2 px-3 rounded-md font-semibold transition text-sm ${view === 'tasks' ? 'bg-green-600 text-white shadow' : 'bg-transparent text-green-700 hover:bg-green-200'}`}>Kelola Tugas</button>
-                <button onClick={() => setView('notes')} className={`flex-1 py-2 px-3 rounded-md font-semibold transition text-sm ${view === 'notes' ? 'bg-green-600 text-white shadow' : 'bg-transparent text-green-700 hover:bg-green-200'}`}>Lihat Catatan Siswa</button>
-                {user.role === 'superadmin' && <button onClick={() => setView('approvals')} className={`flex-1 py-2 px-3 rounded-md font-semibold transition text-sm ${view === 'approvals' ? 'bg-green-600 text-white shadow' : 'bg-transparent text-green-700 hover:bg-green-200'}`}>Persetujuan Admin</button>}
-            </nav>
-
-            <div className="mt-4">
-                {view === 'schedules' && (
-                    <div>
-                        {renderForm('schedules')}
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm text-left">
-                                <thead className="bg-green-200 text-green-800"><tr><th className="p-2">Kelas</th><th className="p-2">Hari</th><th className="p-2">Waktu</th><th className="p-2">Mapel</th><th className="p-2">Guru</th><th className="p-2">Aksi</th></tr></thead>
-                                <tbody>
-                                    {db.schedules.map(s => (
-                                        <tr key={s.id} className="border-b hover:bg-gray-50"><td className="p-2">{s.kelas}</td><td className="p-2">{s.day}</td><td className="p-2">{s.time}</td><td className="p-2">{s.subject}</td><td className="p-2">{s.teacher}</td>
-                                            <td className="p-2 flex gap-2"><button onClick={() => startEdit(s, 'schedules')} className="text-blue-500">Edit</button><button onClick={() => handleCrud('delete', 'schedules', {id: s.id})} className="text-red-500">Hapus</button></td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                )}
-                
-                 {view === 'tasks' && (
-                    <div>
-                        {renderForm('tasks')}
-                        <div className="space-y-3">
-                        {db.tasks.map(t => (
-                            <div key={t.id} className="p-3 bg-white shadow rounded-lg flex justify-between items-start">
-                                <div>
-                                    <p className="font-bold">{t.title} <span className="text-xs font-normal bg-blue-100 text-blue-800 p-1 rounded-full">{t.kelas}</span></p>
-                                    <p className="text-sm text-gray-600">{t.description}</p>
-                                    <p className="text-xs text-red-600">Tenggat: {t.dueDate}</p>
-                                </div>
-                                <div className="flex gap-2 flex-shrink-0 ml-4">
-                                    <button onClick={() => startEdit(t, 'tasks')} className="text-blue-500 text-sm">Edit</button>
-                                    <button onClick={() => handleCrud('delete', 'tasks', {id: t.id})} className="text-red-500 text-sm">Hapus</button>
-                                </div>
-                            </div>
-                        ))}
-                        </div>
-                    </div>
-                )}
-                
-                {view === 'notes' && (
-                    <div className="space-y-3">
-                        <h3 className="text-lg font-bold text-green-800">Catatan Siswa</h3>
-                         {db.notes.map(note => {
-                            const student = db.users.find(u => u.id === note.userId);
-                            const schedule = db.schedules.find(s => s.id === note.scheduleId);
-                            return (
-                                <div key={note.id} className="p-3 bg-yellow-50 border-l-4 border-yellow-400 rounded-r-lg">
-                                    <p className="font-semibold text-yellow-800">"{note.content}"</p>
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        Oleh: <span className="font-bold">{student?.username}</span> | 
-                                        Kelas: <span className="font-bold">{student?.kelas}</span> | 
-                                        Untuk Jadwal: <span className="font-bold">{schedule?.subject} ({schedule?.day})</span>
-                                    </p>
-                                </div>
-                            )
-                         })}
-                         {db.notes.length === 0 && <p className="text-center text-gray-500 py-4">Belum ada catatan dari siswa.</p>}
-                    </div>
-                )}
-                
-                {view === 'approvals' && user.role === 'superadmin' && (
-                    <div className="space-y-3">
-                        <h3 className="text-lg font-bold text-green-800">Persetujuan Pendaftaran Admin</h3>
-                        {db.users.filter(u => u.role === 'admin' && !u.approved).map(admin => (
-                            <div key={admin.id} className="p-3 bg-white shadow rounded-lg flex justify-between items-center">
-                                <p>Username: <span className="font-semibold">{admin.username}</span></p>
-                                <button onClick={() => handleApproveAdmin(admin.id)} className="bg-green-500 text-white px-3 py-1 rounded font-semibold hover:bg-green-600">Setujui</button>
-                            </div>
-                        ))}
-                        {db.users.filter(u => u.role === 'admin' && !u.approved).length === 0 && <p className="text-center text-gray-500 py-4">Tidak ada permintaan persetujuan admin baru.</p>}
-                    </div>
-                )}
+                <p className="text-center text-sm">
+                    {isRegister ? 'Sudah punya akun?' : 'Belum punya akun?'}
+                    <button onClick={() => setIsRegister(!isRegister)} className="ml-1 font-medium text-green-600 hover:text-green-500">
+                        {isRegister ? 'Login di sini' : 'Daftar sekarang'}
+                    </button>
+                </p>
             </div>
         </div>
     );
-};
+}
 
-export default App;
+// --- ADMIN DASHBOARD ---
+function AdminDashboard({ currentUser, db, updateDb, CLASS_LIST, DAYS, onLogout }) {
+    const [activeTab, setActiveTab] = useState('schedule');
+
+    const approveAdmin = (adminId) => {
+        const adminToApprove = db.pendingAdmins.find(a => a.id === adminId);
+        if (adminToApprove) {
+            const updatedUser = { ...adminToApprove, approved: true };
+            updateDb('users', [...db.users, updatedUser]);
+            updateDb('pendingAdmins', db.pendingAdmins.filter(a => a.id !== adminId));
+            alert('Admin disetujui.');
+        }
+    };
+    
+    return (
+        <div className="bg-white/80 backdrop-blur-md rounded-2xl shadow-xl p-6 min-h-[calc(100vh-4rem)]">
+            <header className="flex justify-between items-center mb-6 pb-4 border-b border-green-200">
+                <div className="flex items-center space-x-3">
+                    <TreeLogo />
+                    <div>
+                        <h1 className="text-2xl font-bold text-green-800">Dasbor Admin</h1>
+                        <p className="text-sm text-gray-600">Selamat datang, {currentUser.username}</p>
+                    </div>
+                </div>
+                <button onClick={onLogout} className="px-4 py-2 text-sm font-medium rounded-md text-white bg-red-500 hover:bg-red-600 transition">Logout</button>
+            </header>
+            
+            <nav className="flex space-x-2 border-b mb-6">
+                <button onClick={() => setActiveTab('schedule')} className={`px-4 py-2 rounded-t-lg ${activeTab === 'schedule' ? 'bg-green-100 text-green-800 font-semibold' : 'text-gray-600 hover:bg-green-50'}`}>Manajemen Jadwal</button>
+                <button onClick={() => setActiveTab('assignments')} className={`px-4 py-2 rounded-t-lg ${activeTab === 'assignments' ? 'bg-green-100 text-green-800 font-semibold' : 'text-gray-600 hover:bg-green-50'}`}>Manajemen Tugas</button>
+                <button onClick={() => setActiveTab('notes')} className={`px-4 py-2 rounded-t-lg ${activeTab === 'notes' ? 'bg-green-100 text-green-800 font-semibold' : 'text-gray-600 hover:bg-green-50'}`}>Lihat Catatan User</button>
+                {currentUser.username === 'superadmin' && (
+                     <button onClick={() => setActiveTab('approval')} className={`px-4 py-2 rounded-t-lg ${activeTab === 'approval' ? 'bg-green-100 text-green-800 font-semibold' : 'text-gray-600 hover:bg-green-50'}`}>Persetujuan Admin</button>
+                )}
+            </nav>
+
+            <div className="transition-all duration-300">
+                {activeTab === 'schedule' && <ScheduleManager schedules={db.schedules} updateSchedules={(d) => updateDb('schedules', d)} CLASS_LIST={CLASS_LIST} DAYS={DAYS} />}
+                {activeTab === 'assignments' && <AssignmentManager assignments={db.assignments} updateAssignments={(d) => updateDb('assignments', d)} CLASS_LIST={CLASS_LIST} />}
+                {activeTab === 'notes' && <UserNotesViewer notes={db.notes} users={db.users} />}
+                {activeTab === 'approval' && currentUser.username === 'superadmin' && <AdminApproval pendingAdmins={db.pendingAdmins} onApprove={approveAdmin} />}
+            </div>
+        </div>
+    );
+}
+
+function ScheduleManager({ schedules, updateSchedules, CLASS_LIST, DAYS }) {
+    const [selectedClass, setSelectedClass] = useState(CLASS_LIST[0]);
+    const [editingSchedule, setEditingSchedule] = useState(null); // { day, index, data }
+    const [newSchedule, setNewSchedule] = useState({ day: DAYS[0], start: '07:00', end: '08:30', subject: '' });
+
+    const handleAddOrUpdate = (e) => {
+        e.preventDefault();
+        const updatedSchedules = JSON.parse(JSON.stringify(schedules));
+        if (!updatedSchedules[selectedClass]) {
+            updatedSchedules[selectedClass] = {};
+        }
+
+        const targetDay = editingSchedule ? editingSchedule.day : newSchedule.day;
+        if (!updatedSchedules[selectedClass][targetDay]) {
+            updatedSchedules[selectedClass][targetDay] = [];
+        }
+
+        if (editingSchedule) {
+            const dataToUpdate = { start: newSchedule.start, end: newSchedule.end, subject: newSchedule.subject };
+            updatedSchedules[selectedClass][editingSchedule.day][editingSchedule.index] = dataToUpdate;
+        } else {
+            const dataToAdd = { start: newSchedule.start, end: newSchedule.end, subject: newSchedule.subject };
+            updatedSchedules[selectedClass][newSchedule.day].push(dataToAdd);
+        }
+        
+        // Sort by start time
+        for(const day in updatedSchedules[selectedClass]){
+            updatedSchedules[selectedClass][day].sort((a,b) => a.start.localeCompare(b.start));
+        }
+
+        updateSchedules(updatedSchedules);
+        setEditingSchedule(null);
+        setNewSchedule({ day: DAYS[0], start: '07:00', end: '08:30', subject: '' });
+    };
+
+    const handleDelete = (day, index) => {
+        if(window.confirm('Anda yakin ingin menghapus jadwal ini?')) {
+            const updatedSchedules = JSON.parse(JSON.stringify(schedules));
+            updatedSchedules[selectedClass][day].splice(index, 1);
+            updateSchedules(updatedSchedules);
+        }
+    };
+    
+    const startEditing = (day, index, schedule) => {
+        setEditingSchedule({ day, index, data: schedule });
+        setNewSchedule({ ...schedule, day: day });
+    }
+
+    return (
+        <div>
+            <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Pilih Kelas:</label>
+                <select value={selectedClass} onChange={(e) => setSelectedClass(e.target.value)} className="w-full md:w-1/3 p-2 border rounded-md">
+                    {CLASS_LIST.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Form Add/Edit */}
+                <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                    <h3 className="font-bold text-lg text-green-700 mb-4">{editingSchedule ? 'Edit Jadwal' : 'Tambah Jadwal Baru'}</h3>
+                    <form onSubmit={handleAddOrUpdate} className="space-y-3">
+                        <select value={newSchedule.day} onChange={e => setNewSchedule(s => ({...s, day: e.target.value}))} className="w-full p-2 border rounded-md">
+                            {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                        <input type="text" placeholder="Mata Pelajaran" required value={newSchedule.subject} onChange={e => setNewSchedule(s => ({...s, subject: e.target.value}))} className="w-full p-2 border rounded-md" />
+                        <div className="flex space-x-2">
+                           <input type="time" value={newSchedule.start} onChange={e => setNewSchedule(s => ({...s, start: e.target.value}))} className="w-full p-2 border rounded-md" />
+                           <input type="time" value={newSchedule.end} onChange={e => setNewSchedule(s => ({...s, end: e.target.value}))} className="w-full p-2 border rounded-md" />
+                        </div>
+                        <div className="flex space-x-2">
+                           <button type="submit" className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700">{editingSchedule ? 'Simpan Perubahan' : 'Tambah Jadwal'}</button>
+                           {editingSchedule && <button type="button" onClick={() => {setEditingSchedule(null); setNewSchedule({ day: DAYS[0], start: '07:00', end: '08:30', subject: '' })}} className="w-full bg-gray-300 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-400">Batal</button>}
+                        </div>
+                    </form>
+                </div>
+                
+                {/* Display Schedule */}
+                <div className="space-y-4">
+                    <h3 className="font-bold text-lg">Jadwal Kelas: {selectedClass}</h3>
+                    {DAYS.map(day => (
+                        (schedules[selectedClass]?.[day]?.length > 0) && (
+                            <div key={day}>
+                                <h4 className="font-semibold text-md text-green-800">{day}</h4>
+                                <ul className="mt-1 space-y-2">
+                                    {schedules[selectedClass][day].map((s, index) => (
+                                        <li key={index} className="flex justify-between items-center p-2 bg-white rounded-md shadow-sm">
+                                            <div>
+                                                <span className="font-semibold">{s.subject}</span>
+                                                <span className="text-sm text-gray-500 ml-2">({s.start} - {s.end})</span>
+                                            </div>
+                                            <div className="space-x-2">
+                                                <button onClick={() => startEditing(day, index, s)} className="text-blue-500 hover:text-blue-700 text-sm">Edit</button>
+                                                <button onClick={() => handleDelete(day, index)} className="text-red-500 hover:text-red-700 text-sm">Hapus</button>
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )
+                    ))}
+                    {!schedules[selectedClass] && <p className="text-gray-500">Belum ada jadwal untuk kelas ini.</p>}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function AssignmentManager({ assignments, updateAssignments, CLASS_LIST }) {
+    const [form, setForm] = useState({ title: '', content: '', className: CLASS_LIST[0] });
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        const newAssignment = {
+            id: Date.now(),
+            ...form,
+            createdAt: new Date().toISOString()
+        };
+        updateAssignments([newAssignment, ...assignments]);
+        setForm({ title: '', content: '', className: CLASS_LIST[0] });
+        alert('Tugas berhasil ditambahkan.');
+    };
+
+    const handleDelete = (id) => {
+        if(window.confirm('Anda yakin ingin menghapus tugas ini?')) {
+            updateAssignments(assignments.filter(a => a.id !== id));
+        }
+    }
+
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                <h3 className="font-bold text-lg text-green-700 mb-4">Tambah Tugas Baru</h3>
+                <form onSubmit={handleSubmit} className="space-y-3">
+                    <input type="text" placeholder="Judul Tugas" required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} className="w-full p-2 border rounded-md" />
+                    <textarea placeholder="Deskripsi Tugas" required value={form.content} onChange={e => setForm(f => ({ ...f, content: e.target.value }))} className="w-full p-2 border rounded-md h-24"></textarea>
+                    <select value={form.className} onChange={e => setForm(f => ({ ...f, className: e.target.value }))} className="w-full p-2 border rounded-md">
+                        {CLASS_LIST.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <button type="submit" className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700">Tambah Tugas</button>
+                </form>
+            </div>
+            <div>
+                <h3 className="font-bold text-lg mb-4">Daftar Tugas</h3>
+                <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+                    {assignments.length > 0 ? assignments.map(a => (
+                        <div key={a.id} className="p-3 bg-white rounded-md shadow-sm border-l-4 border-green-500">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <p className="font-semibold">{a.title} <span className="text-sm font-normal text-gray-500">({a.className})</span></p>
+                                    <p className="text-sm text-gray-600 mt-1">{a.content}</p>
+                                </div>
+                                <button onClick={() => handleDelete(a.id)} className="text-red-500 hover:text-red-700 text-xs font-semibold">HAPUS</button>
+                            </div>
+                        </div>
+                    )) : <p className="text-gray-500">Belum ada tugas.</p>}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function UserNotesViewer({ notes, users }) {
+    const notesWithUser = notes.map(note => {
+        const user = users.find(u => u.id === note.userId);
+        return { ...note, user: user || { username: 'Unknown' } };
+    }).sort((a, b) => b.id - a.id);
+
+    return (
+        <div>
+            <h3 className="font-bold text-lg mb-4">Semua Catatan User</h3>
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+                {notesWithUser.length > 0 ? notesWithUser.map(n => (
+                    <div key={n.id} className="p-3 bg-white rounded-md shadow-sm border-l-4 border-yellow-500">
+                        <p className="font-semibold">{n.user.username} - {n.user.className} <span className="text-sm font-normal text-gray-500">(Hari: {n.date})</span></p>
+                        <p className="text-sm text-gray-600 mt-1">{n.content}</p>
+                    </div>
+                )) : <p className="text-gray-500">Belum ada catatan dari user.</p>}
+            </div>
+        </div>
+    );
+}
+
+function AdminApproval({ pendingAdmins, onApprove }) {
+    return (
+        <div>
+            <h3 className="font-bold text-lg mb-4">Persetujuan Pendaftaran Admin</h3>
+             <div className="space-y-3">
+                {pendingAdmins.length > 0 ? pendingAdmins.map(admin => (
+                    <div key={admin.id} className="flex justify-between items-center p-3 bg-white rounded-md shadow-sm">
+                        <p>Username: <span className="font-semibold">{admin.username}</span></p>
+                        <button onClick={() => onApprove(admin.id)} className="bg-green-500 text-white px-3 py-1 rounded-md text-sm hover:bg-green-600">Setujui</button>
+                    </div>
+                )) : <p className="text-gray-500">Tidak ada pendaftaran admin yang menunggu.</p>}
+            </div>
+        </div>
+    );
+}
+
+
+// --- USER DASHBOARD ---
+function UserDashboard({ currentUser, db, updateDb, DAYS, onLogout, hasNotification, setHasNotification }) {
+    const [activeTab, setActiveTab] = useState('schedule');
+    const userSchedule = db.schedules[currentUser.className] || {};
+
+    const handleTabClick = (tab) => {
+        setActiveTab(tab);
+        if(tab === 'assignments') {
+            setHasNotification(false);
+            const timestamps = JSON.parse(localStorage.getItem('lastLoginTimestamps') || '{}');
+            timestamps[currentUser.id] = new Date().toISOString();
+            localStorage.setItem('lastLoginTimestamps', JSON.stringify(timestamps));
+        }
+    }
+
+    return (
+        <div className="bg-white/80 backdrop-blur-md rounded-2xl shadow-xl p-6 min-h-[calc(100vh-4rem)]">
+            <header className="flex justify-between items-center mb-6 pb-4 border-b border-green-200">
+                <div className="flex items-center space-x-3">
+                    <TreeLogo />
+                    <div>
+                        <h1 className="text-2xl font-bold text-green-800">Jadwal Kelas {currentUser.className}</h1>
+                        <p className="text-sm text-gray-600">Halo, {currentUser.username}</p>
+                    </div>
+                </div>
+                <button onClick={onLogout} className="px-4 py-2 text-sm font-medium rounded-md text-white bg-red-500 hover:bg-red-600 transition">Logout</button>
+            </header>
+            
+            <nav className="flex space-x-2 border-b mb-6">
+                <button onClick={() => handleTabClick('schedule')} className={`px-4 py-2 rounded-t-lg ${activeTab === 'schedule' ? 'bg-green-100 text-green-800 font-semibold' : 'text-gray-600 hover:bg-green-50'}`}>Jadwal & Catatan</button>
+                <button onClick={() => handleTabClick('assignments')} className={`px-4 py-2 rounded-t-lg flex items-center space-x-2 ${activeTab === 'assignments' ? 'bg-green-100 text-green-800 font-semibold' : 'text-gray-600 hover:bg-green-50'}`}>
+                    <span>Tugas</span>
+                    <NotificationIcon hasNotification={hasNotification} />
+                </button>
+            </nav>
+
+             <div className="transition-all duration-300">
+                {activeTab === 'schedule' && <UserScheduleView schedule={userSchedule} currentUser={currentUser} notes={db.notes} updateNotes={(d) => updateDb('notes', d)} DAYS={DAYS} />}
+                {activeTab === 'assignments' && <UserAssignmentsView assignments={db.assignments} className={currentUser.className} />}
+             </div>
+        </div>
+    );
+}
+
+function UserScheduleView({ schedule, currentUser, notes, updateNotes, DAYS }) {
+    const [selectedDay, setSelectedDay] = useState(DAYS[0]);
+    const userNoteForDay = notes.find(n => n.userId === currentUser.id && n.date === selectedDay);
+    const [noteContent, setNoteContent] = useState('');
+
+    useEffect(() => {
+        setNoteContent(userNoteForDay ? userNoteForDay.content : '');
+    }, [selectedDay, userNoteForDay]);
+
+    const handleNoteSave = () => {
+        if(userNoteForDay) { // Update existing note
+            const updatedNotes = notes.map(n => n.id === userNoteForDay.id ? {...n, content: noteContent} : n);
+            updateNotes(updatedNotes);
+        } else { // Create new note
+            const newNote = {
+                id: Date.now(),
+                userId: currentUser.id,
+                date: selectedDay,
+                content: noteContent
+            };
+            updateNotes([...notes, newNote]);
+        }
+        alert('Catatan disimpan!');
+    };
+
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+            <div className="md:col-span-3">
+                <h3 className="font-bold text-lg mb-4">Jadwal Pelajaran</h3>
+                <div className="flex flex-wrap gap-2 mb-4">
+                    {DAYS.map(day => (
+                        <button key={day} onClick={() => setSelectedDay(day)} className={`px-3 py-1 rounded-full text-sm font-medium transition ${selectedDay === day ? 'bg-green-600 text-white' : 'bg-gray-200 hover:bg-gray-300'}`}>
+                            {day}
+                        </button>
+                    ))}
+                </div>
+                <div>
+                    <h4 className="font-semibold text-xl text-green-800 mb-2">{selectedDay}</h4>
+                    <ul className="space-y-2">
+                        {schedule[selectedDay]?.length > 0 ? (
+                            schedule[selectedDay].map((s, index) => (
+                                <li key={index} className="p-3 bg-white rounded-lg shadow-sm flex items-center space-x-4">
+                                    <div className="text-center w-20 flex-shrink-0">
+                                        <p className="font-bold text-green-700">{s.start}</p>
+                                        <p className="text-xs text-gray-500">sampai</p>
+                                        <p className="font-semibold text-gray-600">{s.end}</p>
+                                    </div>
+                                    <div className="border-l-2 border-green-200 pl-4">
+                                        <p className="font-semibold text-lg">{s.subject}</p>
+                                    </div>
+                                </li>
+                            ))
+                        ) : <p className="text-gray-500 p-3 bg-white rounded-lg">Tidak ada jadwal untuk hari ini.</p>}
+                    </ul>
+                </div>
+            </div>
+            <div className="md:col-span-2 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                <h3 className="font-bold text-lg text-yellow-800 mb-2">Catatan Pribadi untuk {selectedDay}</h3>
+                <textarea 
+                    value={noteContent}
+                    onChange={(e) => setNoteContent(e.target.value)}
+                    className="w-full h-48 p-2 border rounded-md"
+                    placeholder="Tulis catatan di sini..."
+                ></textarea>
+                <button onClick={handleNoteSave} className="mt-2 w-full bg-yellow-500 text-white py-2 px-4 rounded-md hover:bg-yellow-600">Simpan Catatan</button>
+            </div>
+        </div>
+    );
+}
+
+function UserAssignmentsView({ assignments, className }) {
+    const userAssignments = assignments
+        .filter(a => a.className === className)
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        
+    return (
+        <div>
+            <h3 className="font-bold text-lg mb-4">Daftar Tugas</h3>
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+                {userAssignments.length > 0 ? userAssignments.map(a => (
+                    <div key={a.id} className="p-3 bg-white rounded-md shadow-sm border-l-4 border-blue-500">
+                        <p className="font-semibold">{a.title}</p>
+                        <p className="text-sm text-gray-600 mt-1">{a.content}</p>
+                        <p className="text-xs text-right text-gray-400 mt-2">Dibuat: {new Date(a.createdAt).toLocaleDateString('id-ID')}</p>
+                    </div>
+                )) : <p className="text-gray-500">Tidak ada tugas baru untuk kelas Anda.</p>}
+            </div>
+        </div>
+    );
+}
