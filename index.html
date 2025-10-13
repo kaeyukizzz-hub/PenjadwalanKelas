@@ -10,6 +10,38 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         body {
             font-family: 'Inter', sans-serif;
+            overflow-x: hidden; /* Mencegah scroll horizontal karena animasi */
+        }
+        /* Custom style for file input */
+        .file-input-button {
+            cursor: pointer;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            background-color: #10B981; /* green-500 */
+            color: white;
+            transition: background-color 0.2s;
+        }
+        .file-input-button:hover {
+            background-color: #059669; /* green-600 */
+        }
+        .file-input-label {
+            margin-left: 0.5rem;
+            color: #4B5563; /* gray-600 */
+        }
+        
+        /* Animasi Transisi Halaman */
+        @keyframes slideInFromRight {
+            0% {
+                transform: translateX(30px);
+                opacity: 0;
+            }
+            100% {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        .page-slide-in {
+            animation: slideInFromRight 0.5s ease-out forwards;
         }
     </style>
 </head>
@@ -22,9 +54,16 @@
 
     <!-- Babel to transpile JSX in the browser -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Papa Parse for CSV parsing -->
+    <script src="https://unpkg.com/papaparse@5.3.2/papaparse.min.js"></script>
+    
+    <!-- SheetJS/xlsx for reading Excel files -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
 
     <script type="text/babel">
-        const { useState, useEffect, useCallback, useMemo } = React;
+        const { useState, useEffect, useCallback, useMemo, useRef } = React;
 
         // --- SVG ICON COMPONENTS ---
         const TreeLogo = () => (
@@ -37,8 +76,8 @@
           </svg>
         );
 
-        const NotificationIcon = ({ hasNotification }) => (
-            <div className="relative">
+        const NotificationIcon = ({ hasNotification, onClick }) => (
+            <div className="relative cursor-pointer" onClick={onClick}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-600">
                     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
                 </svg>
@@ -52,7 +91,8 @@
                 console.log("Initializing database for the first time...");
                 const initialUsers = [
                     { id: 1, username: 'superadmin', password: 'superadmin', role: 'admin', approved: true },
-                    { id: 2, username: 'XI-A_user', password: 'password', role: 'user', className: 'XI-A', approved: true },
+                    { id: 2, username: 'admin', password: 'admin', role: 'admin', approved: true },
+                    { id: 3, username: 'XI-A_user', password: 'password', role: 'user', className: 'XI-A', approved: true },
                 ];
                 const initialSchedules = {
                     'XI-A': {
@@ -64,17 +104,17 @@
                     { id: 1, title: 'Tugas Kalkulus', content: 'Kerjakan LKS hal 50.', className: 'XI-A', createdAt: new Date().toISOString() }
                 ];
                 const initialNotes = [
-                    { id: 1, userId: 2, date: 'Senin', content: 'Jangan lupa bawa kalkulator.' }
+                    { id: 1, userId: 3, date: 'Senin', content: 'Jangan lupa bawa kalkulator.' }
                 ];
 
                 localStorage.setItem('users', JSON.stringify(initialUsers));
                 localStorage.setItem('schedules', JSON.stringify(initialSchedules));
                 localStorage.setItem('assignments', JSON.stringify(initialAssignments));
                 localStorage.setItem('notes', JSON.stringify(initialNotes));
-                localStorage.setItem('pendingAdmins', JSON.stringify([]));
+                localStorage.setItem('pendingUsers', JSON.stringify([]));
                 localStorage.setItem('lastLoginTimestamps', JSON.stringify({}));
                 
-                return { users: initialUsers, schedules: initialSchedules, assignments: initialAssignments, notes: initialNotes, pendingAdmins: [] };
+                return { users: initialUsers, schedules: initialSchedules, assignments: initialAssignments, notes: initialNotes, pendingUsers: [] };
             };
 
             const loadData = (key, defaultValue = []) => {
@@ -97,7 +137,7 @@
                     schedules: loadData('schedules', {}),
                     assignments: loadData('assignments'),
                     notes: loadData('notes'),
-                    pendingAdmins: loadData('pendingAdmins'),
+                    pendingUsers: loadData('pendingUsers'),
                 };
             });
 
@@ -114,7 +154,7 @@
         function App() {
             const { db, updateDb } = useDatabase();
             const [currentUser, setCurrentUser] = useState(null);
-            const [page, setPage] = useState('login'); // login, admin, user
+            const [page, setPage] = useState('login');
             const [backgroundPos, setBackgroundPos] = useState(0);
 
             const CLASS_LIST = useMemo(() => {
@@ -125,7 +165,6 @@
 
             const DAYS = useMemo(() => ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'], []);
 
-            // Session check on initial load
             useEffect(() => {
                 const sessionUser = sessionStorage.getItem('currentUser');
                 if (sessionUser) {
@@ -137,10 +176,11 @@
 
             const navigate = (newPage) => {
                 setPage(newPage);
-                setBackgroundPos(prev => prev - 100); // Move background on page change
+                if (newPage !== 'login') {
+                    setBackgroundPos(prev => prev - 100);
+                }
             };
 
-            // --- AUTHENTICATION HANDLERS ---
             const handleLogin = ({ username, password }) => {
                 const user = db.users.find(u => u.username === username && u.password === password);
                 if (user && user.approved) {
@@ -159,8 +199,8 @@
             };
             
             const handleRegister = ({ username, password, className, role }) => {
-                if (db.users.some(u => u.username === username) || db.pendingAdmins.some(u => u.username === username)) {
-                    alert('Username sudah digunakan.');
+                if (db.users.some(u => u.username === username) || db.pendingUsers.some(u => u.username === username)) {
+                    alert('Username sudah digunakan atau sedang dalam proses persetujuan.');
                     return false;
                 }
                 
@@ -170,26 +210,21 @@
                     password,
                     role,
                     className: role === 'user' ? className : null,
-                    approved: role === 'user' // Users are auto-approved
+                    approved: false
                 };
 
-                if (role === 'user') {
-                    updateDb('users', [...db.users, newUser]);
-                    alert('Registrasi user berhasil! Silakan login.');
-                } else { // Admin registration
-                    updateDb('pendingAdmins', [...db.pendingAdmins, newUser]);
-                    alert('Registrasi admin berhasil. Menunggu persetujuan dari Super Admin.');
-                }
+                updateDb('pendingUsers', [...db.pendingUsers, newUser]);
+                alert('Registrasi berhasil! Akun Anda sedang menunggu persetujuan dari Admin.');
                 return true;
             };
 
             const handleLogout = () => {
                 setCurrentUser(null);
                 sessionStorage.removeItem('currentUser');
+                setBackgroundPos(0);
                 navigate('login');
             };
             
-            // --- NOTIFICATION LOGIC ---
             const [hasNotification, setHasNotification] = useState(false);
             useEffect(() => {
                 if (currentUser && currentUser.role === 'user') {
@@ -197,8 +232,6 @@
                     const lastLogin = timestamps[currentUser.id] || new Date(0).toISOString();
                     
                     const newAssignments = db.assignments.some(a => a.className === currentUser.className && a.createdAt > lastLogin);
-                    // In a real app, schedule changes would be tracked. Here we simplify.
-                    // For now, we'll just check for assignments.
                     if (newAssignments) {
                         setHasNotification(true);
                     }
@@ -210,22 +243,22 @@
                 switch (page) {
                     case 'admin':
                         return <AdminDashboard 
-                                    currentUser={currentUser} 
-                                    db={db} 
-                                    updateDb={updateDb} 
-                                    CLASS_LIST={CLASS_LIST} 
-                                    DAYS={DAYS} 
-                                    onLogout={handleLogout} 
+                                currentUser={currentUser} 
+                                db={db} 
+                                updateDb={updateDb} 
+                                CLASS_LIST={CLASS_LIST} 
+                                DAYS={DAYS} 
+                                onLogout={handleLogout} 
                                 />;
                     case 'user':
                         return <UserDashboard 
-                                    currentUser={currentUser} 
-                                    db={db} 
-                                    updateDb={updateDb} 
-                                    DAYS={DAYS} 
-                                    onLogout={handleLogout} 
-                                    hasNotification={hasNotification}
-                                    setHasNotification={setHasNotification}
+                                currentUser={currentUser} 
+                                db={db} 
+                                updateDb={updateDb} 
+                                DAYS={DAYS} 
+                                onLogout={handleLogout} 
+                                hasNotification={hasNotification}
+                                setHasNotification={setHasNotification}
                                 />;
                     default:
                         return <LoginPage onLogin={handleLogin} onRegister={handleRegister} CLASS_LIST={CLASS_LIST} />;
@@ -237,20 +270,21 @@
                     <div 
                         className="fixed inset-0 z-0 bg-cover bg-center transition-transform duration-1000 ease-in-out"
                         style={{
-                            backgroundImage: "url('https://images.unsplash.com/photo-1441974231531-c6227db76b6e?q=80&w=2560&auto=format&fit=crop')",
+                            backgroundImage: "url('https://images.unsplash.com/photo-1501854140801-50d01698950b?q=80&w=2400&auto=format&fit=crop')",
                             transform: `translateX(${backgroundPos}px)`
                         }}
                     ></div>
                     <div className="fixed inset-0 bg-black/30 z-0"></div>
 
-                    <main className="relative z-10 p-4 sm:p-6 md:p-8">
-                        {renderPage()}
+                    <main className="relative z-10">
+                        <div key={page} className="page-slide-in p-4 sm:p-6 md:p-8">
+                           {renderPage()}
+                        </div>
                     </main>
                 </div>
             );
         }
 
-        // --- LOGIN & REGISTRATION PAGE ---
         function LoginPage({ onLogin, onRegister, CLASS_LIST }) {
             const [isRegister, setIsRegister] = useState(false);
             const [form, setForm] = useState({ username: '', password: '', className: CLASS_LIST[0], role: 'user' });
@@ -321,18 +355,22 @@
             );
         }
 
-        // --- ADMIN DASHBOARD ---
         function AdminDashboard({ currentUser, db, updateDb, CLASS_LIST, DAYS, onLogout }) {
-            const [activeTab, setActiveTab] = useState('schedule');
+            const [activeTab, setActiveTab] = useState('approval');
 
-            const approveAdmin = (adminId) => {
-                const adminToApprove = db.pendingAdmins.find(a => a.id === adminId);
-                if (adminToApprove) {
-                    const updatedUser = { ...adminToApprove, approved: true };
-                    updateDb('users', [...db.users, updatedUser]);
-                    updateDb('pendingAdmins', db.pendingAdmins.filter(a => a.id !== adminId));
-                    alert('Admin disetujui.');
+            const handleApproval = (userId, isApproved) => {
+                const userToProcess = db.pendingUsers.find(u => u.id === userId);
+                if (!userToProcess) return;
+
+                if (isApproved) {
+                    const approvedUser = { ...userToProcess, approved: true };
+                    updateDb('users', [...db.users, approvedUser]);
+                    alert(`Registrasi ${userToProcess.username} disetujui.`);
+                } else {
+                    alert(`Registrasi ${userToProcess.username} ditolak.`);
                 }
+                
+                updateDb('pendingUsers', db.pendingUsers.filter(u => u.id !== userId));
             };
             
             return (
@@ -348,20 +386,180 @@
                         <button onClick={onLogout} className="px-4 py-2 text-sm font-medium rounded-md text-white bg-red-500 hover:bg-red-600 transition">Logout</button>
                     </header>
                     
-                    <nav className="flex flex-wrap space-x-2 border-b mb-6">
-                        <button onClick={() => setActiveTab('schedule')} className={`px-4 py-2 rounded-t-lg ${activeTab === 'schedule' ? 'bg-green-100 text-green-800 font-semibold' : 'text-gray-600 hover:bg-green-50'}`}>Manajemen Jadwal</button>
-                        <button onClick={() => setActiveTab('assignments')} className={`px-4 py-2 rounded-t-lg ${activeTab === 'assignments' ? 'bg-green-100 text-green-800 font-semibold' : 'text-gray-600 hover:bg-green-50'}`}>Manajemen Tugas</button>
-                        <button onClick={() => setActiveTab('notes')} className={`px-4 py-2 rounded-t-lg ${activeTab === 'notes' ? 'bg-green-100 text-green-800 font-semibold' : 'text-gray-600 hover:bg-green-50'}`}>Lihat Catatan User</button>
-                        {currentUser.username === 'superadmin' && (
-                             <button onClick={() => setActiveTab('approval')} className={`px-4 py-2 rounded-t-lg ${activeTab === 'approval' ? 'bg-green-100 text-green-800 font-semibold' : 'text-gray-600 hover:bg-green-50'}`}>Persetujuan Admin</button>
-                        )}
+                    <nav className="flex flex-wrap border-b mb-6 -mx-1">
+                         <button onClick={() => setActiveTab('approval')} className={`px-4 py-2 rounded-t-lg mx-1 mb-[-1px] ${activeTab === 'approval' ? 'bg-green-100 text-green-800 font-semibold border border-b-white border-gray-200' : 'text-gray-600 hover:bg-green-50'}`}>Persetujuan Registrasi</button>
+                        <button onClick={() => setActiveTab('schedule')} className={`px-4 py-2 rounded-t-lg mx-1 mb-[-1px] ${activeTab === 'schedule' ? 'bg-green-100 text-green-800 font-semibold border border-b-white border-gray-200' : 'text-gray-600 hover:bg-green-50'}`}>Manajemen Jadwal</button>
+                        <button onClick={() => setActiveTab('assignments')} className={`px-4 py-2 rounded-t-lg mx-1 mb-[-1px] ${activeTab === 'assignments' ? 'bg-green-100 text-green-800 font-semibold border border-b-white border-gray-200' : 'text-gray-600 hover:bg-green-50'}`}>Manajemen Tugas</button>
+                        <button onClick={() => setActiveTab('notes')} className={`px-4 py-2 rounded-t-lg mx-1 mb-[-1px] ${activeTab === 'notes' ? 'bg-green-100 text-green-800 font-semibold border border-b-white border-gray-200' : 'text-gray-600 hover:bg-green-50'}`}>Lihat Catatan User</button>
                     </nav>
 
                     <div className="transition-all duration-300">
+                        {activeTab === 'approval' && <RegistrationApproval currentUser={currentUser} pendingUsers={db.pendingUsers} onApprove={handleApproval} updateDb={updateDb} existingUsers={db.users}/>}
                         {activeTab === 'schedule' && <ScheduleManager schedules={db.schedules} updateSchedules={(d) => updateDb('schedules', d)} CLASS_LIST={CLASS_LIST} DAYS={DAYS} />}
                         {activeTab === 'assignments' && <AssignmentManager assignments={db.assignments} updateAssignments={(d) => updateDb('assignments', d)} CLASS_LIST={CLASS_LIST} />}
                         {activeTab === 'notes' && <UserNotesViewer notes={db.notes} users={db.users} />}
-                        {activeTab === 'approval' && currentUser.username === 'superadmin' && <AdminApproval pendingAdmins={db.pendingAdmins} onApprove={approveAdmin} />}
+                    </div>
+                </div>
+            );
+        }
+        
+        function RegistrationApproval({ currentUser, pendingUsers, onApprove, updateDb, existingUsers }) {
+            const userFileInputRef = useRef(null);
+            const [userFileName, setUserFileName] = useState('');
+            const isSuperAdmin = currentUser.username === 'superadmin';
+
+            // --- FITUR BARU: State dan fungsi untuk impor admin ---
+            const adminFileInputRef = useRef(null);
+            const [adminFileName, setAdminFileName] = useState('');
+
+            const processUserData = (data) => {
+                const newPendingUsers = [];
+                const allUsernames = new Set([...existingUsers.map(u => u.username), ...pendingUsers.map(u => u.username)]);
+                
+                data.forEach(row => {
+                    const { username, password, className } = row;
+                    if (username && password && className && !allUsernames.has(username)) {
+                        newPendingUsers.push({
+                            id: Date.now() + Math.random(),
+                            username,
+                            password: String(password),
+                            className,
+                            role: 'user',
+                            approved: false
+                        });
+                        allUsernames.add(username);
+                    }
+                });
+
+                if (newPendingUsers.length > 0) {
+                    updateDb('pendingUsers', [...pendingUsers, ...newPendingUsers]);
+                    alert(`${newPendingUsers.length} user baru dari file telah ditambahkan ke daftar persetujuan.`);
+                } else {
+                    alert('Tidak ada user baru yang valid untuk ditambahkan. Pastikan file memiliki kolom header "username", "password", "className" dan tidak ada username yang duplikat.');
+                }
+            };
+
+            const handleUserFileChange = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                setUserFileName(file.name);
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+                        processUserData(jsonData);
+                    } catch (error) {
+                         alert('Gagal memproses file: ' + error.message);
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+                if(userFileInputRef.current) userFileInputRef.current.value = '';
+                setUserFileName('');
+            };
+            
+            // --- FITUR BARU: Fungsi untuk memproses file impor admin ---
+            const processAdminData = (data) => {
+                const newPendingAdmins = [];
+                const allUsernames = new Set([...existingUsers.map(u => u.username), ...pendingUsers.map(u => u.username)]);
+                
+                data.forEach(row => {
+                    const { username, password } = row;
+                    if (username && password && !allUsernames.has(username)) {
+                        newPendingAdmins.push({
+                            id: Date.now() + Math.random(),
+                            username,
+                            password: String(password),
+                            className: null,
+                            role: 'admin',
+                            approved: false
+                        });
+                        allUsernames.add(username);
+                    }
+                });
+
+                if (newPendingAdmins.length > 0) {
+                    updateDb('pendingUsers', [...pendingUsers, ...newPendingAdmins]);
+                    alert(`${newPendingAdmins.length} admin baru dari file telah ditambahkan ke daftar persetujuan.`);
+                } else {
+                    alert('Tidak ada admin baru yang valid untuk ditambahkan. Pastikan file memiliki kolom header "username" dan "password", dan tidak ada username yang duplikat.');
+                }
+            };
+
+            const handleAdminFileChange = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                setAdminFileName(file.name);
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+                        processAdminData(jsonData);
+                    } catch (error) {
+                         alert('Gagal memproses file: ' + error.message);
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+                if(adminFileInputRef.current) adminFileInputRef.current.value = '';
+                setAdminFileName('');
+            };
+
+
+            const usersToDisplay = isSuperAdmin ? pendingUsers : pendingUsers.filter(u => u.role === 'user');
+
+            return (
+                <div>
+                     <div className="p-4 bg-green-50 rounded-lg border border-green-200 mb-6">
+                         <h3 className="font-bold text-lg text-green-700 mb-2">Impor User (Siswa) dari File</h3>
+                         <p className="text-sm text-gray-600 mb-4">
+                             Unggah file <strong>Excel (.xlsx, .xls)</strong>.
+                             Pastikan file memiliki kolom header: <strong>username, password, className</strong>.
+                         </p>
+                         <input type="file" accept=".xlsx,.xls" ref={userFileInputRef} onChange={handleUserFileChange} className="hidden" id="user-file-importer" />
+                         <label htmlFor="user-file-importer" className="file-input-button">Pilih File User</label>
+                         {userFileName && <span className="file-input-label">{userFileName}</span>}
+                     </div>
+
+                    {/* --- FITUR BARU: Bagian impor admin, hanya untuk superadmin --- */}
+                    {isSuperAdmin && (
+                         <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 mb-6">
+                             <h3 className="font-bold text-lg text-blue-700 mb-2">Impor Admin dari File (Superadmin Only)</h3>
+                             <p className="text-sm text-gray-600 mb-4">
+                                 Unggah file <strong>Excel (.xlsx, .xls)</strong>.
+                                 Pastikan file memiliki kolom header: <strong>username, password</strong>.
+                             </p>
+                             <input type="file" accept=".xlsx,.xls" ref={adminFileInputRef} onChange={handleAdminFileChange} className="hidden" id="admin-file-importer" />
+                             <label htmlFor="admin-file-importer" className="file-input-button bg-blue-500 hover:bg-blue-600">Pilih File Admin</label>
+                             {adminFileName && <span className="file-input-label">{adminFileName}</span>}
+                         </div>
+                    )}
+
+
+                    <h3 className="font-bold text-lg mb-4">Daftar Registrasi Menunggu Persetujuan</h3>
+                    <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-2">
+                        {usersToDisplay.length > 0 ? usersToDisplay.map(user => (
+                            <div key={user.id} className="flex flex-wrap justify-between items-center p-3 bg-white rounded-md shadow-sm">
+                                <div>
+                                    <p>Username: <span className="font-semibold">{user.username}</span></p>
+                                    <p className="text-sm text-gray-500">
+                                        Role: <span className="capitalize font-medium">{user.role}</span>
+                                        {user.role === 'user' && ` - Kelas: ${user.className}`}
+                                    </p>
+                                </div>
+                                <div className="flex space-x-2 mt-2 sm:mt-0">
+                                    <button onClick={() => onApprove(user.id, true)} className="bg-green-500 text-white px-3 py-1 rounded-md text-sm hover:bg-green-600">Setujui</button>
+                                    <button onClick={() => onApprove(user.id, false)} className="bg-red-500 text-white px-3 py-1 rounded-md text-sm hover:bg-red-600">Tolak</button>
+                                </div>
+                            </div>
+                        )) : <p className="text-gray-500">Tidak ada pendaftaran yang menunggu persetujuan.</p>}
                     </div>
                 </div>
             );
@@ -369,30 +567,84 @@
 
         function ScheduleManager({ schedules, updateSchedules, CLASS_LIST, DAYS }) {
             const [selectedClass, setSelectedClass] = useState(CLASS_LIST[0]);
-            const [editingSchedule, setEditingSchedule] = useState(null); // { day, index, data }
+            const [editingSchedule, setEditingSchedule] = useState(null);
             const [newSchedule, setNewSchedule] = useState({ day: DAYS[0], start: '07:00', end: '08:30', subject: '' });
+            
+            const fileInputRef = useRef(null);
+            const [fileName, setFileName] = useState('');
+
+            const processScheduleData = (data) => {
+                const newSchedules = JSON.parse(JSON.stringify(schedules));
+                let importCount = 0;
+                
+                data.forEach(row => {
+                    const { className, day, start, end, subject } = row;
+                    if (className && day && DAYS.includes(day) && start && end && subject) {
+                        if (!newSchedules[className]) newSchedules[className] = {};
+                        if (!newSchedules[className][day]) newSchedules[className][day] = [];
+                        
+                        const isDuplicate = newSchedules[className][day].some(
+                            item => item.start === start && item.subject === subject
+                        );
+
+                        if (!isDuplicate) {
+                           newSchedules[className][day].push({ start, end, subject });
+                           importCount++;
+                        }
+                    }
+                });
+
+                for (const cName in newSchedules) {
+                    for (const dName in newSchedules[cName]) {
+                        newSchedules[cName][dName].sort((a, b) => a.start.localeCompare(b.start));
+                    }
+                }
+
+                if (importCount > 0) {
+                    updateSchedules(newSchedules);
+                    alert(`${importCount} jadwal baru berhasil diimpor.`);
+                } else {
+                    alert('Tidak ada jadwal baru yang valid untuk diimpor. Pastikan file memiliki kolom header: className, day, start, end, subject, dan tidak ada jadwal yang duplikat.');
+                }
+            };
+            
+            const handleFileChange = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                setFileName(file.name);
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+                        processScheduleData(jsonData);
+                    } catch (error) {
+                        alert('Gagal memproses file: ' + error.message);
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+                if(fileInputRef.current) fileInputRef.current.value = '';
+                setFileName('');
+            };
+
 
             const handleAddOrUpdate = (e) => {
                 e.preventDefault();
                 const updatedSchedules = JSON.parse(JSON.stringify(schedules));
-                if (!updatedSchedules[selectedClass]) {
-                    updatedSchedules[selectedClass] = {};
-                }
-
+                if (!updatedSchedules[selectedClass]) updatedSchedules[selectedClass] = {};
+                
                 const targetDay = editingSchedule ? editingSchedule.day : newSchedule.day;
-                if (!updatedSchedules[selectedClass][targetDay]) {
-                    updatedSchedules[selectedClass][targetDay] = [];
-                }
+                if (!updatedSchedules[selectedClass][targetDay]) updatedSchedules[selectedClass][targetDay] = [];
 
                 if (editingSchedule) {
-                    const dataToUpdate = { start: newSchedule.start, end: newSchedule.end, subject: newSchedule.subject };
-                    updatedSchedules[selectedClass][editingSchedule.day][editingSchedule.index] = dataToUpdate;
+                    updatedSchedules[selectedClass][editingSchedule.day][editingSchedule.index] = { start: newSchedule.start, end: newSchedule.end, subject: newSchedule.subject };
                 } else {
-                    const dataToAdd = { start: newSchedule.start, end: newSchedule.end, subject: newSchedule.subject };
-                    updatedSchedules[selectedClass][newSchedule.day].push(dataToAdd);
+                    updatedSchedules[selectedClass][newSchedule.day].push({ start: newSchedule.start, end: newSchedule.end, subject: newSchedule.subject });
                 }
                 
-                // Sort by start time
                 for(const day in updatedSchedules[selectedClass]){
                     updatedSchedules[selectedClass][day].sort((a,b) => a.start.localeCompare(b.start));
                 }
@@ -403,7 +655,7 @@
             };
 
             const handleDelete = (day, index) => {
-                if(window.confirm('Anda yakin ingin menghapus jadwal ini?')) {
+                if(confirm('Anda yakin ingin menghapus jadwal ini?')) {
                     const updatedSchedules = JSON.parse(JSON.stringify(schedules));
                     updatedSchedules[selectedClass][day].splice(index, 1);
                     updateSchedules(updatedSchedules);
@@ -417,19 +669,29 @@
 
             return (
                 <div>
+                    <div className="p-4 bg-green-50 rounded-lg border border-green-200 mb-6">
+                        <h3 className="font-bold text-lg text-green-700 mb-2">Impor Jadwal dari File</h3>
+                        <p className="text-sm text-gray-600 mb-4">
+                            Unggah file <strong>Excel (.xlsx, .xls)</strong> untuk menambah jadwal.
+                            Pastikan file memiliki kolom header: <strong>className, day, start, end, subject</strong>.
+                        </p>
+                        <input type="file" accept=".xlsx,.xls" ref={fileInputRef} onChange={handleFileChange} className="hidden" id="schedule-importer" />
+                        <label htmlFor="schedule-importer" className="file-input-button">Pilih File</label>
+                        {fileName && <span className="file-input-label">{fileName}</span>}
+                    </div>
+
                     <div className="mb-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Pilih Kelas:</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Pilih Kelas untuk Manajemen Manual:</label>
                         <select value={selectedClass} onChange={(e) => setSelectedClass(e.target.value)} className="w-full md:w-1/3 p-2 border rounded-md">
                             {CLASS_LIST.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                     </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* Form Add/Edit */}
                         <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                            <h3 className="font-bold text-lg text-green-700 mb-4">{editingSchedule ? 'Edit Jadwal' : 'Tambah Jadwal Baru'}</h3>
+                            <h3 className="font-bold text-lg text-green-700 mb-4">{editingSchedule ? 'Edit Jadwal' : 'Tambah Jadwal Manual'}</h3>
                             <form onSubmit={handleAddOrUpdate} className="space-y-3">
-                                <select value={newSchedule.day} onChange={e => setNewSchedule(s => ({...s, day: e.target.value}))} className="w-full p-2 border rounded-md">
+                                <select value={newSchedule.day} disabled={!!editingSchedule} onChange={e => setNewSchedule(s => ({...s, day: e.target.value}))} className="w-full p-2 border rounded-md bg-white disabled:bg-gray-200">
                                     {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
                                 </select>
                                 <input type="text" placeholder="Mata Pelajaran" required value={newSchedule.subject} onChange={e => setNewSchedule(s => ({...s, subject: e.target.value}))} className="w-full p-2 border rounded-md" />
@@ -439,36 +701,33 @@
                                 </div>
                                 <div className="flex space-x-2">
                                    <button type="submit" className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700">{editingSchedule ? 'Simpan Perubahan' : 'Tambah Jadwal'}</button>
-                                   {editingSchedule && <button type="button" onClick={() => {setEditingSchedule(null); setNewSchedule({ day: DAYS[0], start: '07:00', end: '08:30', subject: '' })}} className="w-full bg-gray-300 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-400">Batal</button>}
+                                   {editingSchedule && <button type="button" onClick={() => {setEditingSchedule(null); setNewSchedule({ day: DAYS[0], start: '07:00', end: '08:30', subject: '' })}} className="w-full bg-gray-500 text-white py-2 px-4 rounded-md hover:bg-gray-600">Batal</button>}
                                 </div>
                             </form>
                         </div>
-                        
-                        {/* Display Schedule */}
-                        <div className="space-y-4">
-                            <h3 className="font-bold text-lg">Jadwal Kelas: {selectedClass}</h3>
-                            {DAYS.map(day => (
-                                (schedules[selectedClass]?.[day]?.length > 0) && (
+
+                        <div className="p-4 bg-white rounded-lg shadow-sm max-h-[60vh] overflow-y-auto">
+                            <h3 className="font-bold text-lg mb-4">Jadwal Kelas: {selectedClass}</h3>
+                            <div className="space-y-4">
+                                {DAYS.map(day => (
                                     <div key={day}>
-                                        <h4 className="font-semibold text-md text-green-800">{day}</h4>
-                                        <ul className="mt-1 space-y-2">
-                                            {schedules[selectedClass][day].map((s, index) => (
-                                                <li key={index} className="flex justify-between items-center p-2 bg-white rounded-md shadow-sm">
-                                                    <div>
-                                                        <span className="font-semibold">{s.subject}</span>
-                                                        <span className="text-sm text-gray-500 ml-2">({s.start} - {s.end})</span>
-                                                    </div>
-                                                    <div className="space-x-2">
-                                                        <button onClick={() => startEditing(day, index, s)} className="text-blue-500 hover:text-blue-700 text-sm">Edit</button>
-                                                        <button onClick={() => handleDelete(day, index)} className="text-red-500 hover:text-red-700 text-sm">Hapus</button>
-                                                    </div>
-                                                </li>
-                                            ))}
-                                        </ul>
+                                        <h4 className="font-semibold text-green-700">{day}</h4>
+                                        {(schedules[selectedClass] && schedules[selectedClass][day] && schedules[selectedClass][day].length > 0) ? (
+                                            <ul className="mt-1 space-y-2">
+                                                {schedules[selectedClass][day].map((item, index) => (
+                                                    <li key={index} className="flex justify-between items-center text-sm p-2 bg-gray-50 rounded">
+                                                        <span>{item.start} - {item.end}: <strong>{item.subject}</strong></span>
+                                                        <div className="space-x-2 flex-shrink-0">
+                                                            <button onClick={() => startEditing(day, index, item)} className="text-blue-500 hover:underline">Edit</button>
+                                                            <button onClick={() => handleDelete(day, index)} className="text-red-500 hover:underline">Hapus</button>
+                                                        </div>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        ) : <p className="text-gray-500 text-sm pl-1">Tidak ada jadwal.</p>}
                                     </div>
-                                )
-                            ))}
-                            {!schedules[selectedClass] && <p className="text-gray-500">Belum ada jadwal untuk kelas ini.</p>}
+                                ))}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -476,50 +735,71 @@
         }
 
         function AssignmentManager({ assignments, updateAssignments, CLASS_LIST }) {
-            const [form, setForm] = useState({ title: '', content: '', className: CLASS_LIST[0] });
+            const initialFormState = { title: '', content: '', className: CLASS_LIST[0] };
+            const [form, setForm] = useState(initialFormState);
+            const [editingId, setEditingId] = useState(null);
+
+            const handleChange = (e) => {
+                const { name, value } = e.target;
+                setForm(prev => ({...prev, [name]: value}));
+            };
 
             const handleSubmit = (e) => {
                 e.preventDefault();
-                const newAssignment = {
-                    id: Date.now(),
-                    ...form,
-                    createdAt: new Date().toISOString()
-                };
-                updateAssignments([newAssignment, ...assignments]);
-                setForm({ title: '', content: '', className: CLASS_LIST[0] });
-                alert('Tugas berhasil ditambahkan.');
+                if (editingId) {
+                    const updatedAssignments = assignments.map(a => a.id === editingId ? {...a, ...form} : a);
+                    updateAssignments(updatedAssignments);
+                } else {
+                    const newAssignment = { ...form, id: Date.now(), createdAt: new Date().toISOString() };
+                    updateAssignments([...assignments, newAssignment]);
+                }
+                setForm(initialFormState);
+                setEditingId(null);
+            };
+            
+            const handleEdit = (assignment) => {
+                setEditingId(assignment.id);
+                setForm({ title: assignment.title, content: assignment.content, className: assignment.className });
             };
 
             const handleDelete = (id) => {
-                if(window.confirm('Anda yakin ingin menghapus tugas ini?')) {
+                if (confirm('Anda yakin ingin menghapus tugas ini?')) {
                     updateAssignments(assignments.filter(a => a.id !== id));
                 }
-            }
+            };
+            
+            const cancelEdit = () => {
+                setEditingId(null);
+                setForm(initialFormState);
+            };
 
             return (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                        <h3 className="font-bold text-lg text-green-700 mb-4">Tambah Tugas Baru</h3>
-                        <form onSubmit={handleSubmit} className="space-y-3">
-                            <input type="text" placeholder="Judul Tugas" required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} className="w-full p-2 border rounded-md" />
-                            <textarea placeholder="Deskripsi Tugas" required value={form.content} onChange={e => setForm(f => ({ ...f, content: e.target.value }))} className="w-full p-2 border rounded-md h-24"></textarea>
-                            <select value={form.className} onChange={e => setForm(f => ({ ...f, className: e.target.value }))} className="w-full p-2 border rounded-md">
+                        <h3 className="font-bold text-lg text-green-700 mb-4">{editingId ? 'Edit Tugas' : 'Tambah Tugas Baru'}</h3>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <input name="title" value={form.title} onChange={handleChange} placeholder="Judul Tugas" required className="w-full p-2 border rounded-md" />
+                            <textarea name="content" value={form.content} onChange={handleChange} placeholder="Deskripsi Tugas" required className="w-full p-2 border rounded-md h-24"></textarea>
+                            <select name="className" value={form.className} onChange={handleChange} className="w-full p-2 border rounded-md">
                                 {CLASS_LIST.map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
-                            <button type="submit" className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700">Tambah Tugas</button>
+                            <div className="flex space-x-2">
+                                <button type="submit" className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700">{editingId ? 'Simpan Perubahan' : 'Tambah Tugas'}</button>
+                                {editingId && <button type="button" onClick={cancelEdit} className="w-full bg-gray-500 text-white py-2 px-4 rounded-md hover:bg-gray-600">Batal</button>}
+                            </div>
                         </form>
                     </div>
-                    <div>
+                    <div className="p-4 bg-white rounded-lg shadow-sm max-h-[60vh] overflow-y-auto">
                         <h3 className="font-bold text-lg mb-4">Daftar Tugas</h3>
-                        <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-                            {assignments.length > 0 ? assignments.map(a => (
-                                <div key={a.id} className="p-3 bg-white rounded-md shadow-sm border-l-4 border-green-500">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <p className="font-semibold">{a.title} <span className="text-sm font-normal text-gray-500">({a.className})</span></p>
-                                            <p className="text-sm text-gray-600 mt-1">{a.content}</p>
-                                        </div>
-                                        <button onClick={() => handleDelete(a.id)} className="text-red-500 hover:text-red-700 text-xs font-semibold">HAPUS</button>
+                        <div className="space-y-4">
+                            {assignments.length > 0 ? [...assignments].reverse().map(assignment => (
+                                <div key={assignment.id} className="p-3 border rounded-md bg-gray-50">
+                                    <h4 className="font-semibold">{assignment.title} <span className="text-sm font-normal text-gray-500">- {assignment.className}</span></h4>
+                                    <p className="text-gray-700 my-1">{assignment.content}</p>
+                                    <small className="text-gray-400">Dibuat: {new Date(assignment.createdAt).toLocaleString('id-ID')}</small>
+                                    <div className="flex space-x-2 mt-2">
+                                        <button onClick={() => handleEdit(assignment)} className="text-blue-500 hover:underline text-sm">Edit</button>
+                                        <button onClick={() => handleDelete(assignment.id)} className="text-red-500 hover:underline text-sm">Hapus</button>
                                     </div>
                                 </div>
                             )) : <p className="text-gray-500">Belum ada tugas.</p>}
@@ -530,175 +810,169 @@
         }
 
         function UserNotesViewer({ notes, users }) {
-            const notesWithUser = notes.map(note => {
-                const user = users.find(u => u.id === note.userId);
-                return { ...note, user: user || { username: 'Unknown' } };
-            }).sort((a, b) => b.id - a.id);
+            const [selectedClass, setSelectedClass] = useState('all');
+            const classList = useMemo(() => ['all', ...new Set(users.filter(u => u.role === 'user').map(u => u.className))], [users]);
+            
+            const notesWithUsernames = useMemo(() => {
+                return notes.map(note => {
+                    const user = users.find(u => u.id === note.userId);
+                    return { ...note, user: user || { username: 'Tidak diketahui', className: 'N/A' } };
+                });
+            }, [notes, users]);
+            
+            const filteredNotes = useMemo(() => {
+                if (selectedClass === 'all') return notesWithUsernames;
+                return notesWithUsernames.filter(note => note.user.className === selectedClass);
+            }, [selectedClass, notesWithUsernames]);
 
             return (
                 <div>
-                    <h3 className="font-bold text-lg mb-4">Semua Catatan User</h3>
-                    <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
-                        {notesWithUser.length > 0 ? notesWithUser.map(n => (
-                            <div key={n.id} className="p-3 bg-white rounded-md shadow-sm border-l-4 border-yellow-500">
-                                <p className="font-semibold">{n.user.username} - {n.user.className} <span className="text-sm font-normal text-gray-500">(Hari: {n.date})</span></p>
-                                <p className="text-sm text-gray-600 mt-1">{n.content}</p>
+                     <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Filter Berdasarkan Kelas:</label>
+                        <select value={selectedClass} onChange={(e) => setSelectedClass(e.target.value)} className="w-full md:w-1/3 p-2 border rounded-md">
+                            {classList.map(c => <option key={c} value={c}>{c === 'all' ? 'Semua Kelas' : c}</option>)}
+                        </select>
+                    </div>
+                    <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-2">
+                        {filteredNotes.length > 0 ? [...filteredNotes].reverse().map(note => (
+                            <div key={note.id} className="p-4 bg-white rounded-lg shadow-sm">
+                                <p className="font-semibold">{note.user.username} <span className="text-sm font-normal text-gray-500">({note.user.className})</span> - <span className="text-green-700">{note.date}</span></p>
+                                <p className="text-gray-700 mt-1">{note.content}</p>
                             </div>
-                        )) : <p className="text-gray-500">Belum ada catatan dari user.</p>}
+                        )) : <p className="text-gray-500">Tidak ada catatan untuk kelas yang dipilih.</p>}
                     </div>
                 </div>
             );
         }
 
-        function AdminApproval({ pendingAdmins, onApprove }) {
-            return (
-                <div>
-                    <h3 className="font-bold text-lg mb-4">Persetujuan Pendaftaran Admin</h3>
-                     <div className="space-y-3">
-                        {pendingAdmins.length > 0 ? pendingAdmins.map(admin => (
-                            <div key={admin.id} className="flex justify-between items-center p-3 bg-white rounded-md shadow-sm">
-                                <p>Username: <span className="font-semibold">{admin.username}</span></p>
-                                <button onClick={() => onApprove(admin.id)} className="bg-green-500 text-white px-3 py-1 rounded-md text-sm hover:bg-green-600">Setujui</button>
-                            </div>
-                        )) : <p className="text-gray-500">Tidak ada pendaftaran admin yang menunggu.</p>}
-                    </div>
-                </div>
-            );
-        }
-
-
-        // --- USER DASHBOARD ---
         function UserDashboard({ currentUser, db, updateDb, DAYS, onLogout, hasNotification, setHasNotification }) {
             const [activeTab, setActiveTab] = useState('schedule');
-            const userSchedule = db.schedules[currentUser.className] || {};
+            const [currentDayIndex] = useState(new Date().getDay()); // 0=Minggu, 1=Senin..
+            const [showNotificationModal, setShowNotificationModal] = useState(false);
+            
+            const scheduleForClass = db.schedules[currentUser.className] || {};
+            const assignmentsForClass = useMemo(() => 
+                db.assignments.filter(a => a.className === currentUser.className), 
+            [db.assignments, currentUser.className]);
 
-            const handleTabClick = (tab) => {
-                setActiveTab(tab);
-                if(tab === 'assignments') {
-                    setHasNotification(false);
-                    const timestamps = JSON.parse(localStorage.getItem('lastLoginTimestamps') || '{}');
-                    timestamps[currentUser.id] = new Date().toISOString();
-                    localStorage.setItem('lastLoginTimestamps', JSON.stringify(timestamps));
+            const notesForUser = useMemo(() => 
+                db.notes.filter(n => n.userId === currentUser.id),
+            [db.notes, currentUser.id]);
+
+            useEffect(() => {
+              if(hasNotification){
+                setShowNotificationModal(true);
+              }
+            }, [hasNotification]);
+
+            const closeNotification = () => {
+              setShowNotificationModal(false);
+              setHasNotification(false);
+              const timestamps = JSON.parse(localStorage.getItem('lastLoginTimestamps') || '{}');
+              timestamps[currentUser.id] = new Date().toISOString();
+              localStorage.setItem('lastLoginTimestamps', JSON.stringify(timestamps));
+            };
+
+            const updateNote = (day, content) => {
+                const newNotes = [...db.notes];
+                const noteIndex = newNotes.findIndex(n => n.userId === currentUser.id && n.date === day);
+                if(noteIndex > -1) {
+                    if(content) {
+                        newNotes[noteIndex].content = content;
+                    } else {
+                        newNotes.splice(noteIndex, 1);
+                    }
+                } else if(content) {
+                    newNotes.push({
+                        id: Date.now(),
+                        userId: currentUser.id,
+                        date: day,
+                        content: content
+                    });
                 }
-            }
+                updateDb('notes', newNotes);
+            };
+
+            const latestAssignments = useMemo(() => {
+                const timestamps = JSON.parse(localStorage.getItem('lastLoginTimestamps') || '{}');
+                const lastLogin = timestamps[currentUser.id];
+                return assignmentsForClass.filter(a => a.createdAt > lastLogin);
+            }, [assignmentsForClass, currentUser.id]);
 
             return (
                 <div className="bg-white/80 backdrop-blur-md rounded-2xl shadow-xl p-6 min-h-[calc(100vh-4rem)]">
                     <header className="flex justify-between items-center mb-6 pb-4 border-b border-green-200">
                         <div className="flex items-center space-x-3">
-                            <TreeLogo />
-                            <div>
-                                <h1 className="text-2xl font-bold text-green-800">Jadwal Kelas {currentUser.className}</h1>
-                                <p className="text-sm text-gray-600">Halo, {currentUser.username}</p>
-                            </div>
+                           <TreeLogo />
+                           <div>
+                                <h1 className="text-2xl font-bold text-green-800">Dasbor Kelas {currentUser.className}</h1>
+                                <p className="text-sm text-gray-600">Selamat datang, {currentUser.username}</p>
+                           </div>
                         </div>
-                        <button onClick={onLogout} className="px-4 py-2 text-sm font-medium rounded-md text-white bg-red-500 hover:bg-red-600 transition">Logout</button>
+                        <div className="flex items-center space-x-4">
+                            <NotificationIcon hasNotification={hasNotification} onClick={() => setShowNotificationModal(true)} />
+                            <button onClick={onLogout} className="px-4 py-2 text-sm font-medium rounded-md text-white bg-red-500 hover:bg-red-600 transition">Logout</button>
+                        </div>
                     </header>
                     
-                    <nav className="flex flex-wrap space-x-2 border-b mb-6">
-                        <button onClick={() => handleTabClick('schedule')} className={`px-4 py-2 rounded-t-lg ${activeTab === 'schedule' ? 'bg-green-100 text-green-800 font-semibold' : 'text-gray-600 hover:bg-green-50'}`}>Jadwal & Catatan</button>
-                        <button onClick={() => handleTabClick('assignments')} className={`px-4 py-2 rounded-t-lg flex items-center space-x-2 ${activeTab === 'assignments' ? 'bg-green-100 text-green-800 font-semibold' : 'text-gray-600 hover:bg-green-50'}`}>
-                            <span>Tugas</span>
-                            <NotificationIcon hasNotification={hasNotification} />
-                        </button>
+                    <nav className="flex border-b mb-6">
+                        <button onClick={() => setActiveTab('schedule')} className={`px-4 py-2 ${activeTab === 'schedule' ? 'border-b-2 border-green-600 font-semibold text-green-700' : 'text-gray-600'}`}>Jadwal & Catatan</button>
+                        <button onClick={() => setActiveTab('assignments')} className={`px-4 py-2 ${activeTab === 'assignments' ? 'border-b-2 border-green-600 font-semibold text-green-700' : 'text-gray-600'}`}>Tugas</button>
                     </nav>
 
-                     <div className="transition-all duration-300">
-                        {activeTab === 'schedule' && <UserScheduleView schedule={userSchedule} currentUser={currentUser} notes={db.notes} updateNotes={(d) => updateDb('notes', d)} DAYS={DAYS} />}
-                        {activeTab === 'assignments' && <UserAssignmentsView assignments={db.assignments} className={currentUser.className} />}
-                     </div>
-                </div>
-            );
-        }
-
-        function UserScheduleView({ schedule, currentUser, notes, updateNotes, DAYS }) {
-            const [selectedDay, setSelectedDay] = useState(DAYS[0]);
-            const userNoteForDay = notes.find(n => n.userId === currentUser.id && n.date === selectedDay);
-            const [noteContent, setNoteContent] = useState('');
-
-            useEffect(() => {
-                setNoteContent(userNoteForDay ? userNoteForDay.content : '');
-            }, [selectedDay, userNoteForDay]);
-
-            const handleNoteSave = () => {
-                let updatedNotes;
-                if(userNoteForDay) { // Update existing note
-                    updatedNotes = notes.map(n => n.id === userNoteForDay.id ? {...n, content: noteContent} : n);
-                } else { // Create new note
-                    const newNote = {
-                        id: Date.now(),
-                        userId: currentUser.id,
-                        date: selectedDay,
-                        content: noteContent
-                    };
-                    updatedNotes = [...notes, newNote];
-                }
-                updateNotes(updatedNotes);
-                alert('Catatan disimpan!');
-            };
-
-            return (
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-                    <div className="md:col-span-3">
-                        <h3 className="font-bold text-lg mb-4">Jadwal Pelajaran</h3>
-                        <div className="flex flex-wrap gap-2 mb-4">
-                            {DAYS.map(day => (
-                                <button key={day} onClick={() => setSelectedDay(day)} className={`px-3 py-1 rounded-full text-sm font-medium transition ${selectedDay === day ? 'bg-green-600 text-white' : 'bg-gray-200 hover:bg-gray-300'}`}>
-                                    {day}
-                                </button>
-                            ))}
+                    {activeTab === 'schedule' && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {DAYS.map((day, index) => {
+                                const isToday = (currentDayIndex % 7) === (index + 1);
+                                const note = notesForUser.find(n => n.date === day);
+                                return (
+                                <div key={day} className={`p-4 rounded-lg shadow ${isToday ? 'bg-green-100 border-2 border-green-400' : 'bg-white'}`}>
+                                    <h3 className={`font-bold text-lg ${isToday ? 'text-green-800' : ''}`}>{day}</h3>
+                                    <ul className="mt-2 space-y-1 text-sm">
+                                        {(scheduleForClass[day] && scheduleForClass[day].length > 0) ? scheduleForClass[day].map((item, i) => (
+                                            <li key={i}>{item.start} - {item.end}: <strong>{item.subject}</strong></li>
+                                        )) : <li className="text-gray-400">Tidak ada jadwal.</li>}
+                                    </ul>
+                                    <textarea 
+                                        defaultValue={note ? note.content : ''}
+                                        onBlur={(e) => updateNote(day, e.target.value)}
+                                        placeholder="Catatan pribadi..."
+                                        className="w-full p-2 mt-4 border rounded-md text-sm bg-yellow-50 focus:bg-yellow-100 focus:ring-1 focus:ring-yellow-500"
+                                    ></textarea>
+                                </div>
+                            )})}
                         </div>
-                        <div>
-                            <h4 className="font-semibold text-xl text-green-800 mb-2">{selectedDay}</h4>
-                            <ul className="space-y-2">
-                                {schedule[selectedDay]?.length > 0 ? (
-                                    schedule[selectedDay].map((s, index) => (
-                                        <li key={index} className="p-3 bg-white rounded-lg shadow-sm flex items-center space-x-4">
-                                            <div className="text-center w-20 flex-shrink-0">
-                                                <p className="font-bold text-green-700">{s.start}</p>
-                                                <p className="text-xs text-gray-500">sampai</p>
-                                                <p className="font-semibold text-gray-600">{s.end}</p>
-                                            </div>
-                                            <div className="border-l-2 border-green-200 pl-4">
-                                                <p className="font-semibold text-lg">{s.subject}</p>
-                                            </div>
-                                        </li>
-                                    ))
-                                ) : <p className="text-gray-500 p-3 bg-white rounded-lg">Tidak ada jadwal untuk hari ini.</p>}
-                            </ul>
-                        </div>
-                    </div>
-                    <div className="md:col-span-2 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                        <h3 className="font-bold text-lg text-yellow-800 mb-2">Catatan Pribadi untuk {selectedDay}</h3>
-                        <textarea 
-                            value={noteContent}
-                            onChange={(e) => setNoteContent(e.target.value)}
-                            className="w-full h-48 p-2 border rounded-md"
-                            placeholder="Tulis catatan di sini..."
-                        ></textarea>
-                        <button onClick={handleNoteSave} className="mt-2 w-full bg-yellow-500 text-white py-2 px-4 rounded-md hover:bg-yellow-600">Simpan Catatan</button>
-                    </div>
-                </div>
-            );
-        }
+                    )}
 
-        function UserAssignmentsView({ assignments, className }) {
-            const userAssignments = assignments
-                .filter(a => a.className === className)
-                .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-                
-            return (
-                <div>
-                    <h3 className="font-bold text-lg mb-4">Daftar Tugas</h3>
-                    <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
-                        {userAssignments.length > 0 ? userAssignments.map(a => (
-                            <div key={a.id} className="p-3 bg-white rounded-md shadow-sm border-l-4 border-blue-500">
-                                <p className="font-semibold">{a.title}</p>
-                                <p className="text-sm text-gray-600 mt-1">{a.content}</p>
-                                <p className="text-xs text-right text-gray-400 mt-2">Dibuat: {new Date(a.createdAt).toLocaleDateString('id-ID')}</p>
+                    {activeTab === 'assignments' && (
+                        <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-2">
+                             {assignmentsForClass.length > 0 ? [...assignmentsForClass].reverse().map(assignment => (
+                                <div key={assignment.id} className="p-4 bg-white rounded-lg shadow-sm border-l-4 border-green-500">
+                                    <h3 className="font-bold text-lg">{assignment.title}</h3>
+                                    <p className="text-gray-700 mt-1">{assignment.content}</p>
+                                    <small className="text-gray-400">Dibuat: {new Date(assignment.createdAt).toLocaleString('id-ID')}</small>
+                                </div>
+                             )) : <p className="text-gray-500">Tidak ada tugas untuk kelas Anda.</p>}
+                        </div>
+                    )}
+                    
+                    {showNotificationModal && latestAssignments.length > 0 && (
+                        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 p-4">
+                            <div className="bg-white rounded-lg p-6 max-w-lg w-full">
+                                <h2 className="text-xl font-bold mb-4">Tugas Baru!</h2>
+                                <div className="space-y-3 max-h-60 overflow-y-auto">
+                                  {latestAssignments.map(a => (
+                                    <div key={a.id} className="p-2 border rounded">
+                                      <p className="font-semibold">{a.title}</p>
+                                      <p className="text-sm">{a.content}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                                <button onClick={closeNotification} className="mt-6 w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700">Mengerti</button>
                             </div>
-                        )) : <p className="text-gray-500">Tidak ada tugas baru untuk kelas Anda.</p>}
-                    </div>
+                        </div>
+                    )}
+
                 </div>
             );
         }
@@ -709,3 +983,4 @@
     </script>
 </body>
 </html>
+
