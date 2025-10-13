@@ -76,12 +76,16 @@
           </svg>
         );
 
-        const NotificationIcon = ({ hasNotification, onClick }) => (
+        const NotificationIcon = ({ count, onClick }) => (
             <div className="relative cursor-pointer" onClick={onClick}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-600">
                     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
                 </svg>
-                {hasNotification && <span className="absolute top-0 right-0 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"></span>}
+                {count > 0 && (
+                    <span className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white ring-2 ring-white">
+                        {count > 99 ? '99+' : count}
+                    </span>
+                )}
             </div>
         );
 
@@ -112,9 +116,17 @@
                 localStorage.setItem('assignments', JSON.stringify(initialAssignments));
                 localStorage.setItem('notes', JSON.stringify(initialNotes));
                 localStorage.setItem('pendingUsers', JSON.stringify([]));
-                localStorage.setItem('lastLoginTimestamps', JSON.stringify({}));
+                // --- FITUR BARU: Menambahkan penyimpanan notifikasi ---
+                localStorage.setItem('notifications', JSON.stringify([]));
                 
-                return { users: initialUsers, schedules: initialSchedules, assignments: initialAssignments, notes: initialNotes, pendingUsers: [] };
+                return { 
+                    users: initialUsers, 
+                    schedules: initialSchedules, 
+                    assignments: initialAssignments, 
+                    notes: initialNotes, 
+                    pendingUsers: [],
+                    notifications: [] 
+                };
             };
 
             const loadData = (key, defaultValue = []) => {
@@ -138,6 +150,7 @@
                     assignments: loadData('assignments'),
                     notes: loadData('notes'),
                     pendingUsers: loadData('pendingUsers'),
+                    notifications: loadData('notifications', []),
                 };
             });
 
@@ -186,11 +199,6 @@
                 if (user && user.approved) {
                     setCurrentUser(user);
                     sessionStorage.setItem('currentUser', JSON.stringify(user));
-                    
-                    const timestamps = JSON.parse(localStorage.getItem('lastLoginTimestamps') || '{}');
-                    timestamps[user.id] = new Date().toISOString();
-                    localStorage.setItem('lastLoginTimestamps', JSON.stringify(timestamps));
-                    
                     navigate(user.role);
                     return true;
                 }
@@ -224,20 +232,6 @@
                 setBackgroundPos(0);
                 navigate('login');
             };
-            
-            const [hasNotification, setHasNotification] = useState(false);
-            useEffect(() => {
-                if (currentUser && currentUser.role === 'user') {
-                    const timestamps = JSON.parse(localStorage.getItem('lastLoginTimestamps') || '{}');
-                    const lastLogin = timestamps[currentUser.id] || new Date(0).toISOString();
-                    
-                    const newAssignments = db.assignments.some(a => a.className === currentUser.className && a.createdAt > lastLogin);
-                    if (newAssignments) {
-                        setHasNotification(true);
-                    }
-                }
-            }, [currentUser, db.assignments]);
-
 
             const renderPage = () => {
                 switch (page) {
@@ -256,9 +250,7 @@
                                 db={db} 
                                 updateDb={updateDb} 
                                 DAYS={DAYS} 
-                                onLogout={handleLogout} 
-                                hasNotification={hasNotification}
-                                setHasNotification={setHasNotification}
+                                onLogout={handleLogout}
                                 />;
                     default:
                         return <LoginPage onLogin={handleLogin} onRegister={handleRegister} CLASS_LIST={CLASS_LIST} />;
@@ -395,8 +387,8 @@
 
                     <div className="transition-all duration-300">
                         {activeTab === 'approval' && <RegistrationApproval currentUser={currentUser} pendingUsers={db.pendingUsers} onApprove={handleApproval} updateDb={updateDb} existingUsers={db.users}/>}
-                        {activeTab === 'schedule' && <ScheduleManager schedules={db.schedules} updateSchedules={(d) => updateDb('schedules', d)} CLASS_LIST={CLASS_LIST} DAYS={DAYS} />}
-                        {activeTab === 'assignments' && <AssignmentManager assignments={db.assignments} updateAssignments={(d) => updateDb('assignments', d)} CLASS_LIST={CLASS_LIST} />}
+                        {activeTab === 'schedule' && <ScheduleManager db={db} updateDb={updateDb} CLASS_LIST={CLASS_LIST} DAYS={DAYS} />}
+                        {activeTab === 'assignments' && <AssignmentManager db={db} updateDb={updateDb} CLASS_LIST={CLASS_LIST} />}
                         {activeTab === 'notes' && <UserNotesViewer notes={db.notes} users={db.users} />}
                     </div>
                 </div>
@@ -407,8 +399,6 @@
             const userFileInputRef = useRef(null);
             const [userFileName, setUserFileName] = useState('');
             const isSuperAdmin = currentUser.username === 'superadmin';
-
-            // --- FITUR BARU: State dan fungsi untuk impor admin ---
             const adminFileInputRef = useRef(null);
             const [adminFileName, setAdminFileName] = useState('');
 
@@ -442,7 +432,6 @@
             const handleUserFileChange = (event) => {
                 const file = event.target.files[0];
                 if (!file) return;
-
                 setUserFileName(file.name);
                 const reader = new FileReader();
                 reader.onload = (e) => {
@@ -462,7 +451,6 @@
                 setUserFileName('');
             };
             
-            // --- FITUR BARU: Fungsi untuk memproses file impor admin ---
             const processAdminData = (data) => {
                 const newPendingAdmins = [];
                 const allUsernames = new Set([...existingUsers.map(u => u.username), ...pendingUsers.map(u => u.username)]);
@@ -512,7 +500,6 @@
                 setAdminFileName('');
             };
 
-
             const usersToDisplay = isSuperAdmin ? pendingUsers : pendingUsers.filter(u => u.role === 'user');
 
             return (
@@ -528,7 +515,6 @@
                          {userFileName && <span className="file-input-label">{userFileName}</span>}
                      </div>
 
-                    {/* --- FITUR BARU: Bagian impor admin, hanya untuk superadmin --- */}
                     {isSuperAdmin && (
                          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 mb-6">
                              <h3 className="font-bold text-lg text-blue-700 mb-2">Impor Admin dari File (Superadmin Only)</h3>
@@ -541,7 +527,6 @@
                              {adminFileName && <span className="file-input-label">{adminFileName}</span>}
                          </div>
                     )}
-
 
                     <h3 className="font-bold text-lg mb-4">Daftar Registrasi Menunggu Persetujuan</h3>
                     <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-2">
@@ -565,46 +550,60 @@
             );
         }
 
-        function ScheduleManager({ schedules, updateSchedules, CLASS_LIST, DAYS }) {
+        function ScheduleManager({ db, updateDb, CLASS_LIST, DAYS }) {
             const [selectedClass, setSelectedClass] = useState(CLASS_LIST[0]);
             const [editingSchedule, setEditingSchedule] = useState(null);
             const [newSchedule, setNewSchedule] = useState({ day: DAYS[0], start: '07:00', end: '08:30', subject: '' });
-            
             const fileInputRef = useRef(null);
             const [fileName, setFileName] = useState('');
 
+            const createScheduleNotifications = (classNames) => {
+                const affectedUsers = db.users.filter(user => classNames.includes(user.className));
+                const newNotifications = affectedUsers.map(user => ({
+                    id: Date.now() + Math.random(),
+                    userId: user.id,
+                    type: 'schedule_update',
+                    content: `Jadwal untuk kelas ${user.className} telah diperbarui.`,
+                    timestamp: new Date().toISOString(),
+                    isRead: false
+                }));
+                if (newNotifications.length > 0) {
+                    updateDb('notifications', [...db.notifications, ...newNotifications]);
+                }
+            };
+            
+            const handleUpdate = (newSchedules, updatedClasses) => {
+                updateDb('schedules', newSchedules);
+                createScheduleNotifications(updatedClasses);
+            };
+
             const processScheduleData = (data) => {
-                const newSchedules = JSON.parse(JSON.stringify(schedules));
+                const newSchedules = JSON.parse(JSON.stringify(db.schedules));
                 let importCount = 0;
-                
+                const updatedClasses = new Set();
                 data.forEach(row => {
                     const { className, day, start, end, subject } = row;
                     if (className && day && DAYS.includes(day) && start && end && subject) {
                         if (!newSchedules[className]) newSchedules[className] = {};
                         if (!newSchedules[className][day]) newSchedules[className][day] = [];
-                        
-                        const isDuplicate = newSchedules[className][day].some(
-                            item => item.start === start && item.subject === subject
-                        );
-
+                        const isDuplicate = newSchedules[className][day].some(item => item.start === start && item.subject === subject);
                         if (!isDuplicate) {
                            newSchedules[className][day].push({ start, end, subject });
                            importCount++;
+                           updatedClasses.add(className);
                         }
                     }
                 });
-
-                for (const cName in newSchedules) {
-                    for (const dName in newSchedules[cName]) {
-                        newSchedules[cName][dName].sort((a, b) => a.start.localeCompare(b.start));
-                    }
-                }
-
                 if (importCount > 0) {
-                    updateSchedules(newSchedules);
+                    for (const cName in newSchedules) {
+                        for (const dName in newSchedules[cName]) {
+                            newSchedules[cName][dName].sort((a, b) => a.start.localeCompare(b.start));
+                        }
+                    }
+                    handleUpdate(newSchedules, Array.from(updatedClasses));
                     alert(`${importCount} jadwal baru berhasil diimpor.`);
                 } else {
-                    alert('Tidak ada jadwal baru yang valid untuk diimpor. Pastikan file memiliki kolom header: className, day, start, end, subject, dan tidak ada jadwal yang duplikat.');
+                    alert('Tidak ada jadwal baru yang valid untuk diimpor.');
                 }
             };
             
@@ -630,42 +629,35 @@
                 setFileName('');
             };
 
-
             const handleAddOrUpdate = (e) => {
                 e.preventDefault();
-                const updatedSchedules = JSON.parse(JSON.stringify(schedules));
+                const updatedSchedules = JSON.parse(JSON.stringify(db.schedules));
                 if (!updatedSchedules[selectedClass]) updatedSchedules[selectedClass] = {};
-                
                 const targetDay = editingSchedule ? editingSchedule.day : newSchedule.day;
                 if (!updatedSchedules[selectedClass][targetDay]) updatedSchedules[selectedClass][targetDay] = [];
-
                 if (editingSchedule) {
                     updatedSchedules[selectedClass][editingSchedule.day][editingSchedule.index] = { start: newSchedule.start, end: newSchedule.end, subject: newSchedule.subject };
                 } else {
                     updatedSchedules[selectedClass][newSchedule.day].push({ start: newSchedule.start, end: newSchedule.end, subject: newSchedule.subject });
                 }
-                
-                for(const day in updatedSchedules[selectedClass]){
-                    updatedSchedules[selectedClass][day].sort((a,b) => a.start.localeCompare(b.start));
-                }
-
-                updateSchedules(updatedSchedules);
+                updatedSchedules[selectedClass][targetDay].sort((a,b) => a.start.localeCompare(b.start));
+                handleUpdate(updatedSchedules, [selectedClass]);
                 setEditingSchedule(null);
                 setNewSchedule({ day: DAYS[0], start: '07:00', end: '08:30', subject: '' });
             };
 
             const handleDelete = (day, index) => {
                 if(confirm('Anda yakin ingin menghapus jadwal ini?')) {
-                    const updatedSchedules = JSON.parse(JSON.stringify(schedules));
+                    const updatedSchedules = JSON.parse(JSON.stringify(db.schedules));
                     updatedSchedules[selectedClass][day].splice(index, 1);
-                    updateSchedules(updatedSchedules);
+                    handleUpdate(updatedSchedules, [selectedClass]);
                 }
             };
             
             const startEditing = (day, index, schedule) => {
                 setEditingSchedule({ day, index, data: schedule });
                 setNewSchedule({ ...schedule, day: day });
-            }
+            };
 
             return (
                 <div>
@@ -712,9 +704,9 @@
                                 {DAYS.map(day => (
                                     <div key={day}>
                                         <h4 className="font-semibold text-green-700">{day}</h4>
-                                        {(schedules[selectedClass] && schedules[selectedClass][day] && schedules[selectedClass][day].length > 0) ? (
+                                        {(db.schedules[selectedClass] && db.schedules[selectedClass][day] && db.schedules[selectedClass][day].length > 0) ? (
                                             <ul className="mt-1 space-y-2">
-                                                {schedules[selectedClass][day].map((item, index) => (
+                                                {db.schedules[selectedClass][day].map((item, index) => (
                                                     <li key={index} className="flex justify-between items-center text-sm p-2 bg-gray-50 rounded">
                                                         <span>{item.start} - {item.end}: <strong>{item.subject}</strong></span>
                                                         <div className="space-x-2 flex-shrink-0">
@@ -734,25 +726,38 @@
             );
         }
 
-        function AssignmentManager({ assignments, updateAssignments, CLASS_LIST }) {
+        function AssignmentManager({ db, updateDb, CLASS_LIST }) {
             const initialFormState = { title: '', content: '', className: CLASS_LIST[0] };
             const [form, setForm] = useState(initialFormState);
             const [editingId, setEditingId] = useState(null);
 
-            const handleChange = (e) => {
-                const { name, value } = e.target;
-                setForm(prev => ({...prev, [name]: value}));
+            const createAssignmentNotifications = (assignment) => {
+                const affectedUsers = db.users.filter(user => user.className === assignment.className);
+                const newNotifications = affectedUsers.map(user => ({
+                    id: Date.now() + Math.random(),
+                    userId: user.id,
+                    type: 'new_assignment',
+                    content: `Tugas Baru: ${assignment.title}`,
+                    details: assignment.content,
+                    timestamp: new Date().toISOString(),
+                    isRead: false
+                }));
+                if(newNotifications.length > 0) {
+                    updateDb('notifications', [...db.notifications, ...newNotifications]);
+                }
             };
 
             const handleSubmit = (e) => {
                 e.preventDefault();
+                let updatedAssignments;
                 if (editingId) {
-                    const updatedAssignments = assignments.map(a => a.id === editingId ? {...a, ...form} : a);
-                    updateAssignments(updatedAssignments);
+                    updatedAssignments = db.assignments.map(a => a.id === editingId ? {...a, ...form} : a);
                 } else {
                     const newAssignment = { ...form, id: Date.now(), createdAt: new Date().toISOString() };
-                    updateAssignments([...assignments, newAssignment]);
+                    updatedAssignments = [...db.assignments, newAssignment];
+                    createAssignmentNotifications(newAssignment);
                 }
+                updateDb('assignments', updatedAssignments);
                 setForm(initialFormState);
                 setEditingId(null);
             };
@@ -764,7 +769,7 @@
 
             const handleDelete = (id) => {
                 if (confirm('Anda yakin ingin menghapus tugas ini?')) {
-                    updateAssignments(assignments.filter(a => a.id !== id));
+                    updateDb('assignments', db.assignments.filter(a => a.id !== id));
                 }
             };
             
@@ -778,9 +783,9 @@
                     <div className="p-4 bg-green-50 rounded-lg border border-green-200">
                         <h3 className="font-bold text-lg text-green-700 mb-4">{editingId ? 'Edit Tugas' : 'Tambah Tugas Baru'}</h3>
                         <form onSubmit={handleSubmit} className="space-y-4">
-                            <input name="title" value={form.title} onChange={handleChange} placeholder="Judul Tugas" required className="w-full p-2 border rounded-md" />
-                            <textarea name="content" value={form.content} onChange={handleChange} placeholder="Deskripsi Tugas" required className="w-full p-2 border rounded-md h-24"></textarea>
-                            <select name="className" value={form.className} onChange={handleChange} className="w-full p-2 border rounded-md">
+                            <input name="title" value={form.title} onChange={e => setForm(f => ({...f, title: e.target.value}))} placeholder="Judul Tugas" required className="w-full p-2 border rounded-md" />
+                            <textarea name="content" value={form.content} onChange={e => setForm(f => ({...f, content: e.target.value}))} placeholder="Deskripsi Tugas" required className="w-full p-2 border rounded-md h-24"></textarea>
+                            <select name="className" value={form.className} onChange={e => setForm(f => ({...f, className: e.target.value}))} className="w-full p-2 border rounded-md">
                                 {CLASS_LIST.map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
                             <div className="flex space-x-2">
@@ -792,7 +797,7 @@
                     <div className="p-4 bg-white rounded-lg shadow-sm max-h-[60vh] overflow-y-auto">
                         <h3 className="font-bold text-lg mb-4">Daftar Tugas</h3>
                         <div className="space-y-4">
-                            {assignments.length > 0 ? [...assignments].reverse().map(assignment => (
+                            {db.assignments.length > 0 ? [...db.assignments].reverse().map(assignment => (
                                 <div key={assignment.id} className="p-3 border rounded-md bg-gray-50">
                                     <h4 className="font-semibold">{assignment.title} <span className="text-sm font-normal text-gray-500">- {assignment.className}</span></h4>
                                     <p className="text-gray-700 my-1">{assignment.content}</p>
@@ -845,11 +850,19 @@
             );
         }
 
-        function UserDashboard({ currentUser, db, updateDb, DAYS, onLogout, hasNotification, setHasNotification }) {
+        function UserDashboard({ currentUser, db, updateDb, DAYS, onLogout }) {
             const [activeTab, setActiveTab] = useState('schedule');
-            const [currentDayIndex] = useState(new Date().getDay()); // 0=Minggu, 1=Senin..
-            const [showNotificationModal, setShowNotificationModal] = useState(false);
+            const [currentDayIndex] = useState(new Date().getDay());
+            const [isModalOpen, setIsModalOpen] = useState(false);
             
+            const userNotifications = useMemo(() => 
+                db.notifications.filter(n => n.userId === currentUser.id).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)), 
+            [db.notifications, currentUser.id]);
+
+            const unreadCount = useMemo(() => 
+                userNotifications.filter(n => !n.isRead).length, 
+            [userNotifications]);
+
             const scheduleForClass = db.schedules[currentUser.className] || {};
             const assignmentsForClass = useMemo(() => 
                 db.assignments.filter(a => a.className === currentUser.className), 
@@ -859,45 +872,48 @@
                 db.notes.filter(n => n.userId === currentUser.id),
             [db.notes, currentUser.id]);
 
-            useEffect(() => {
-              if(hasNotification){
-                setShowNotificationModal(true);
-              }
-            }, [hasNotification]);
+            const formatTimestamp = (isoString) => {
+                const date = new Date(isoString);
+                return date.toLocaleString('id-ID', {
+                    weekday: 'long',
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            };
 
-            const closeNotification = () => {
-              setShowNotificationModal(false);
-              setHasNotification(false);
-              const timestamps = JSON.parse(localStorage.getItem('lastLoginTimestamps') || '{}');
-              timestamps[currentUser.id] = new Date().toISOString();
-              localStorage.setItem('lastLoginTimestamps', JSON.stringify(timestamps));
+            const openModalAndMarkAsRead = () => {
+                setIsModalOpen(true);
+                if (unreadCount > 0) {
+                    const updatedNotifications = db.notifications.map(n => 
+                        (n.userId === currentUser.id && !n.isRead) ? { ...n, isRead: true } : n
+                    );
+                    updateDb('notifications', updatedNotifications);
+                }
+            };
+            
+            const handleDeleteNotification = (notifId) => {
+                updateDb('notifications', db.notifications.filter(n => n.id !== notifId));
+            };
+            
+            const handleDeleteAllNotifications = () => {
+                // **PERBAIKAN**: Menghapus 'confirm' agar tombol berfungsi
+                updateDb('notifications', db.notifications.filter(n => n.userId !== currentUser.id));
             };
 
             const updateNote = (day, content) => {
                 const newNotes = [...db.notes];
                 const noteIndex = newNotes.findIndex(n => n.userId === currentUser.id && n.date === day);
                 if(noteIndex > -1) {
-                    if(content) {
-                        newNotes[noteIndex].content = content;
-                    } else {
-                        newNotes.splice(noteIndex, 1);
-                    }
+                    if(content) newNotes[noteIndex].content = content;
+                    else newNotes.splice(noteIndex, 1);
                 } else if(content) {
-                    newNotes.push({
-                        id: Date.now(),
-                        userId: currentUser.id,
-                        date: day,
-                        content: content
-                    });
+                    newNotes.push({ id: Date.now(), userId: currentUser.id, date: day, content: content });
                 }
                 updateDb('notes', newNotes);
             };
-
-            const latestAssignments = useMemo(() => {
-                const timestamps = JSON.parse(localStorage.getItem('lastLoginTimestamps') || '{}');
-                const lastLogin = timestamps[currentUser.id];
-                return assignmentsForClass.filter(a => a.createdAt > lastLogin);
-            }, [assignmentsForClass, currentUser.id]);
 
             return (
                 <div className="bg-white/80 backdrop-blur-md rounded-2xl shadow-xl p-6 min-h-[calc(100vh-4rem)]">
@@ -910,7 +926,7 @@
                            </div>
                         </div>
                         <div className="flex items-center space-x-4">
-                            <NotificationIcon hasNotification={hasNotification} onClick={() => setShowNotificationModal(true)} />
+                            <NotificationIcon count={unreadCount} onClick={openModalAndMarkAsRead} />
                             <button onClick={onLogout} className="px-4 py-2 text-sm font-medium rounded-md text-white bg-red-500 hover:bg-red-600 transition">Logout</button>
                         </div>
                     </header>
@@ -956,23 +972,45 @@
                         </div>
                     )}
                     
-                    {showNotificationModal && latestAssignments.length > 0 && (
+                    {isModalOpen && (
                         <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 p-4">
-                            <div className="bg-white rounded-lg p-6 max-w-lg w-full">
-                                <h2 className="text-xl font-bold mb-4">Tugas Baru!</h2>
-                                <div className="space-y-3 max-h-60 overflow-y-auto">
-                                  {latestAssignments.map(a => (
-                                    <div key={a.id} className="p-2 border rounded">
-                                      <p className="font-semibold">{a.title}</p>
-                                      <p className="text-sm">{a.content}</p>
-                                    </div>
-                                  ))}
+                            <div className="bg-white rounded-lg p-6 max-w-2xl w-full shadow-2xl flex flex-col">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h2 className="text-2xl font-bold text-gray-800">Riwayat Pemberitahuan</h2>
+                                    <button onClick={() => setIsModalOpen(false)} className="text-gray-500 hover:text-gray-800 text-3xl leading-none">&times;</button>
                                 </div>
-                                <button onClick={closeNotification} className="mt-6 w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700">Mengerti</button>
+                                <div className="space-y-3 max-h-96 overflow-y-auto pr-2 flex-grow">
+                                  {userNotifications.length > 0 ? userNotifications.map(n => (
+                                    <div key={n.id} className="relative flex items-start space-x-3 p-3 bg-gray-50 border rounded-lg">
+                                      <div className={`flex-shrink-0 h-6 w-6 rounded-full flex items-center justify-center text-white ${n.type === 'new_assignment' ? 'bg-green-500' : 'bg-blue-500'}`}>
+                                        {n.type === 'new_assignment' ? 'T' : 'J'}
+                                      </div>
+                                      <div className="flex-1">
+                                        <p className={`font-semibold ${n.type === 'new_assignment' ? 'text-green-800' : 'text-blue-800'}`}>{n.content}</p>
+                                        {n.details && <p className="text-sm text-gray-600">{n.details}</p>}
+                                        <p className="text-xs text-gray-400 mt-1">{formatTimestamp(n.timestamp)}</p>
+                                      </div>
+                                      <button onClick={() => handleDeleteNotification(n.id)} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 font-bold">&times;</button>
+                                    </div>
+                                  )) : (
+                                    <p className="text-gray-500 text-center py-8">Tidak ada riwayat pemberitahuan.</p>
+                                  )}
+                                </div>
+                                <div className="flex justify-between items-center mt-6 pt-4 border-t">
+                                    <button 
+                                        onClick={handleDeleteAllNotifications} 
+                                        disabled={userNotifications.length === 0}
+                                        className="text-sm text-red-600 hover:underline disabled:text-gray-400 disabled:no-underline disabled:cursor-not-allowed"
+                                    >
+                                        Hapus Semua
+                                    </button>
+                                    <button onClick={() => setIsModalOpen(false)} className="bg-green-600 text-white py-2 px-6 rounded-md hover:bg-green-700 transition duration-200">
+                                        Tutup
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     )}
-
                 </div>
             );
         }
@@ -983,4 +1021,5 @@
     </script>
 </body>
 </html>
+
 
