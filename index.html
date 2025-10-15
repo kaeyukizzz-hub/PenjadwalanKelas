@@ -55,9 +55,6 @@
     <!-- Babel to transpile JSX in the browser -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- Papa Parse for CSV parsing -->
-    <script src="https://unpkg.com/papaparse@5.3.2/papaparse.min.js"></script>
-    
     <!-- SheetJS/xlsx for reading Excel files -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
@@ -116,7 +113,6 @@
                 localStorage.setItem('assignments', JSON.stringify(initialAssignments));
                 localStorage.setItem('notes', JSON.stringify(initialNotes));
                 localStorage.setItem('pendingUsers', JSON.stringify([]));
-                // --- FITUR BARU: Menambahkan penyimpanan notifikasi ---
                 localStorage.setItem('notifications', JSON.stringify([]));
                 
                 return { 
@@ -552,18 +548,21 @@
 
         function ScheduleManager({ db, updateDb, CLASS_LIST, DAYS }) {
             const [selectedClass, setSelectedClass] = useState(CLASS_LIST[0]);
-            const [editingSchedule, setEditingSchedule] = useState(null);
+            const [editingSchedule, setEditingSchedule] = useState(null); // {day, index, data}
             const [newSchedule, setNewSchedule] = useState({ day: DAYS[0], start: '07:00', end: '08:30', subject: '' });
             const fileInputRef = useRef(null);
-            const [fileName, setFileName] = useState('');
-
-            const createScheduleNotifications = (classNames) => {
+            
+            const createScheduleNotifications = (classNames, action) => {
                 const affectedUsers = db.users.filter(user => classNames.includes(user.className));
+                const content = action === 'delete' 
+                    ? `Salah satu jadwal untuk kelas Anda telah dihapus.`
+                    : `Jadwal untuk kelas Anda telah diperbarui.`;
+
                 const newNotifications = affectedUsers.map(user => ({
                     id: Date.now() + Math.random(),
                     userId: user.id,
                     type: 'schedule_update',
-                    content: `Jadwal untuk kelas ${user.className} telah diperbarui.`,
+                    content,
                     timestamp: new Date().toISOString(),
                     isRead: false
                 }));
@@ -572,9 +571,9 @@
                 }
             };
             
-            const handleUpdate = (newSchedules, updatedClasses) => {
+            const handleUpdate = (newSchedules, updatedClasses, action = 'update') => {
                 updateDb('schedules', newSchedules);
-                createScheduleNotifications(updatedClasses);
+                createScheduleNotifications(updatedClasses, action);
             };
 
             const processScheduleData = (data) => {
@@ -586,31 +585,31 @@
                     if (className && day && DAYS.includes(day) && start && end && subject) {
                         if (!newSchedules[className]) newSchedules[className] = {};
                         if (!newSchedules[className][day]) newSchedules[className][day] = [];
-                        const isDuplicate = newSchedules[className][day].some(item => item.start === start && item.subject === subject);
-                        if (!isDuplicate) {
-                           newSchedules[className][day].push({ start, end, subject });
-                           importCount++;
-                           updatedClasses.add(className);
-                        }
+                        
+                        newSchedules[className][day].push({ start, end, subject });
+                        updatedClasses.add(className);
+                        importCount++;
                     }
                 });
+
+                // Sort schedules for each updated class and day
+                updatedClasses.forEach(className => {
+                    Object.keys(newSchedules[className]).forEach(day => {
+                        newSchedules[className][day].sort((a, b) => a.start.localeCompare(b.start));
+                    });
+                });
+
                 if (importCount > 0) {
-                    for (const cName in newSchedules) {
-                        for (const dName in newSchedules[cName]) {
-                            newSchedules[cName][dName].sort((a, b) => a.start.localeCompare(b.start));
-                        }
-                    }
                     handleUpdate(newSchedules, Array.from(updatedClasses));
-                    alert(`${importCount} jadwal baru berhasil diimpor.`);
+                    alert(`${importCount} jadwal berhasil diimpor.`);
                 } else {
-                    alert('Tidak ada jadwal baru yang valid untuk diimpor.');
+                    alert('Tidak ada data jadwal yang valid untuk diimpor. Pastikan file memiliki kolom: className, day, start, end, subject.');
                 }
             };
             
             const handleFileChange = (event) => {
                 const file = event.target.files[0];
                 if (!file) return;
-                setFileName(file.name);
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     try {
@@ -625,98 +624,111 @@
                     }
                 };
                 reader.readAsArrayBuffer(file);
-                if(fileInputRef.current) fileInputRef.current.value = '';
-                setFileName('');
+                if (fileInputRef.current) fileInputRef.current.value = '';
+            };
+            
+            const handleFormChange = (e) => {
+                const { name, value } = e.target;
+                if (editingSchedule) {
+                    setEditingSchedule(prev => ({...prev, data: {...prev.data, [name]: value }}));
+                } else {
+                    setNewSchedule(prev => ({ ...prev, [name]: value }));
+                }
             };
 
-            const handleAddOrUpdate = (e) => {
+            const handleFormSubmit = (e) => {
                 e.preventDefault();
-                const updatedSchedules = JSON.parse(JSON.stringify(db.schedules));
-                if (!updatedSchedules[selectedClass]) updatedSchedules[selectedClass] = {};
-                const targetDay = editingSchedule ? editingSchedule.day : newSchedule.day;
-                if (!updatedSchedules[selectedClass][targetDay]) updatedSchedules[selectedClass][targetDay] = [];
-                if (editingSchedule) {
-                    updatedSchedules[selectedClass][editingSchedule.day][editingSchedule.index] = { start: newSchedule.start, end: newSchedule.end, subject: newSchedule.subject };
-                } else {
-                    updatedSchedules[selectedClass][newSchedule.day].push({ start: newSchedule.start, end: newSchedule.end, subject: newSchedule.subject });
+                const currentData = editingSchedule ? editingSchedule.data : newSchedule;
+                if (!currentData.subject) {
+                    alert('Mata pelajaran tidak boleh kosong.');
+                    return;
                 }
-                updatedSchedules[selectedClass][targetDay].sort((a,b) => a.start.localeCompare(b.start));
-                handleUpdate(updatedSchedules, [selectedClass]);
-                setEditingSchedule(null);
+
+                const newSchedules = JSON.parse(JSON.stringify(db.schedules));
+                if (!newSchedules[selectedClass]) newSchedules[selectedClass] = {};
+                if (!newSchedules[selectedClass][currentData.day]) newSchedules[selectedClass][currentData.day] = [];
+                
+                if (editingSchedule) {
+                    // Update existing
+                    newSchedules[selectedClass][editingSchedule.day][editingSchedule.index] = currentData;
+                } else {
+                    // Add new
+                    newSchedules[selectedClass][currentData.day].push(currentData);
+                }
+
+                // Sort
+                newSchedules[selectedClass][currentData.day].sort((a, b) => a.start.localeCompare(b.start));
+
+                handleUpdate(newSchedules, [selectedClass]);
                 setNewSchedule({ day: DAYS[0], start: '07:00', end: '08:30', subject: '' });
+                setEditingSchedule(null);
             };
 
             const handleDelete = (day, index) => {
-                if(confirm('Anda yakin ingin menghapus jadwal ini?')) {
-                    const updatedSchedules = JSON.parse(JSON.stringify(db.schedules));
-                    updatedSchedules[selectedClass][day].splice(index, 1);
-                    handleUpdate(updatedSchedules, [selectedClass]);
-                }
+                if (!confirm('Apakah Anda yakin ingin menghapus jadwal ini?')) return;
+                const newSchedules = JSON.parse(JSON.stringify(db.schedules));
+                newSchedules[selectedClass][day].splice(index, 1);
+                handleUpdate(newSchedules, [selectedClass], 'delete');
             };
-            
-            const startEditing = (day, index, schedule) => {
-                setEditingSchedule({ day, index, data: schedule });
-                setNewSchedule({ ...schedule, day: day });
-            };
+
+            const currentClassSchedule = db.schedules[selectedClass] || {};
 
             return (
                 <div>
                     <div className="p-4 bg-green-50 rounded-lg border border-green-200 mb-6">
-                        <h3 className="font-bold text-lg text-green-700 mb-2">Impor Jadwal dari File</h3>
-                        <p className="text-sm text-gray-600 mb-4">
-                            Unggah file <strong>Excel (.xlsx, .xls)</strong> untuk menambah jadwal.
-                            Pastikan file memiliki kolom header: <strong>className, day, start, end, subject</strong>.
-                        </p>
-                        <input type="file" accept=".xlsx,.xls" ref={fileInputRef} onChange={handleFileChange} className="hidden" id="schedule-importer" />
-                        <label htmlFor="schedule-importer" className="file-input-button">Pilih File</label>
-                        {fileName && <span className="file-input-label">{fileName}</span>}
+                         <h3 className="font-bold text-lg text-green-700 mb-2">Impor Jadwal dari File</h3>
+                         <p className="text-sm text-gray-600 mb-4">
+                             Unggah file <strong>Excel (.xlsx, .xls)</strong>.
+                             Pastikan file memiliki kolom header: <strong>className, day, start, end, subject</strong>.
+                         </p>
+                         <input type="file" accept=".xlsx,.xls" ref={fileInputRef} onChange={handleFileChange} className="hidden" id="schedule-file-importer" />
+                         <label htmlFor="schedule-file-importer" className="file-input-button">Pilih File Jadwal</label>
                     </div>
 
-                    <div className="mb-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Pilih Kelas untuk Manajemen Manual:</label>
-                        <select value={selectedClass} onChange={(e) => setSelectedClass(e.target.value)} className="w-full md:w-1/3 p-2 border rounded-md">
+                    <div className="flex flex-wrap items-center gap-4 mb-4">
+                        <label htmlFor="class-select" className="font-semibold">Pilih Kelas:</label>
+                        <select id="class-select" value={selectedClass} onChange={e => setSelectedClass(e.target.value)} className="p-2 border rounded-md">
                             {CLASS_LIST.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                     </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                            <h3 className="font-bold text-lg text-green-700 mb-4">{editingSchedule ? 'Edit Jadwal' : 'Tambah Jadwal Manual'}</h3>
-                            <form onSubmit={handleAddOrUpdate} className="space-y-3">
-                                <select value={newSchedule.day} disabled={!!editingSchedule} onChange={e => setNewSchedule(s => ({...s, day: e.target.value}))} className="w-full p-2 border rounded-md bg-white disabled:bg-gray-200">
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="md:col-span-1 p-4 bg-white rounded-lg shadow">
+                            <h3 className="font-bold text-lg mb-4">{editingSchedule ? 'Edit Jadwal' : 'Tambah Jadwal Baru'}</h3>
+                            <form onSubmit={handleFormSubmit} className="space-y-4">
+                                <select name="day" value={editingSchedule ? editingSchedule.data.day : newSchedule.day} onChange={handleFormChange} className="w-full p-2 border rounded-md">
                                     {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
                                 </select>
-                                <input type="text" placeholder="Mata Pelajaran" required value={newSchedule.subject} onChange={e => setNewSchedule(s => ({...s, subject: e.target.value}))} className="w-full p-2 border rounded-md" />
-                                <div className="flex space-x-2">
-                                   <input type="time" value={newSchedule.start} onChange={e => setNewSchedule(s => ({...s, start: e.target.value}))} className="w-full p-2 border rounded-md" />
-                                   <input type="time" value={newSchedule.end} onChange={e => setNewSchedule(s => ({...s, end: e.target.value}))} className="w-full p-2 border rounded-md" />
+                                <div className="flex gap-2">
+                                    <input type="time" name="start" value={editingSchedule ? editingSchedule.data.start : newSchedule.start} onChange={handleFormChange} className="w-full p-2 border rounded-md" />
+                                    <input type="time" name="end" value={editingSchedule ? editingSchedule.data.end : newSchedule.end} onChange={handleFormChange} className="w-full p-2 border rounded-md" />
                                 </div>
-                                <div className="flex space-x-2">
-                                   <button type="submit" className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700">{editingSchedule ? 'Simpan Perubahan' : 'Tambah Jadwal'}</button>
-                                   {editingSchedule && <button type="button" onClick={() => {setEditingSchedule(null); setNewSchedule({ day: DAYS[0], start: '07:00', end: '08:30', subject: '' })}} className="w-full bg-gray-500 text-white py-2 px-4 rounded-md hover:bg-gray-600">Batal</button>}
+                                <input type="text" name="subject" placeholder="Mata Pelajaran" value={editingSchedule ? editingSchedule.data.subject : newSchedule.subject} onChange={handleFormChange} className="w-full p-2 border rounded-md" />
+                                <div className="flex gap-2">
+                                    <button type="submit" className="w-full bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600">{editingSchedule ? 'Update' : 'Tambah'}</button>
+                                    {editingSchedule && <button type="button" onClick={() => setEditingSchedule(null)} className="w-full bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600">Batal</button>}
                                 </div>
                             </form>
                         </div>
-
-                        <div className="p-4 bg-white rounded-lg shadow-sm max-h-[60vh] overflow-y-auto">
-                            <h3 className="font-bold text-lg mb-4">Jadwal Kelas: {selectedClass}</h3>
+                        <div className="md:col-span-2 p-4 bg-white rounded-lg shadow max-h-[70vh] overflow-y-auto">
+                            <h3 className="font-bold text-lg mb-4">Jadwal Kelas {selectedClass}</h3>
                             <div className="space-y-4">
                                 {DAYS.map(day => (
                                     <div key={day}>
                                         <h4 className="font-semibold text-green-700">{day}</h4>
-                                        {(db.schedules[selectedClass] && db.schedules[selectedClass][day] && db.schedules[selectedClass][day].length > 0) ? (
-                                            <ul className="mt-1 space-y-2">
-                                                {db.schedules[selectedClass][day].map((item, index) => (
-                                                    <li key={index} className="flex justify-between items-center text-sm p-2 bg-gray-50 rounded">
-                                                        <span>{item.start} - {item.end}: <strong>{item.subject}</strong></span>
-                                                        <div className="space-x-2 flex-shrink-0">
-                                                            <button onClick={() => startEditing(day, index, item)} className="text-blue-500 hover:underline">Edit</button>
-                                                            <button onClick={() => handleDelete(day, index)} className="text-red-500 hover:underline">Hapus</button>
+                                        {currentClassSchedule[day] && currentClassSchedule[day].length > 0 ? (
+                                            <ul className="list-disc list-inside space-y-2 mt-2">
+                                                {currentClassSchedule[day].map((item, index) => (
+                                                    <li key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded-md">
+                                                        <span><strong>{item.start} - {item.end}</strong>: {item.subject}</span>
+                                                        <div className="flex gap-2">
+                                                            <button onClick={() => setEditingSchedule({ day, index, data: item })} className="text-blue-500 hover:underline text-sm">Edit</button>
+                                                            <button onClick={() => handleDelete(day, index)} className="text-red-500 hover:underline text-sm">Hapus</button>
                                                         </div>
                                                     </li>
                                                 ))}
                                             </ul>
-                                        ) : <p className="text-gray-500 text-sm pl-1">Tidak ada jadwal.</p>}
+                                        ) : <p className="text-gray-500 text-sm italic mt-1">Tidak ada jadwal.</p>}
                                     </div>
                                 ))}
                             </div>
@@ -727,290 +739,338 @@
         }
 
         function AssignmentManager({ db, updateDb, CLASS_LIST }) {
-            const initialFormState = { title: '', content: '', className: CLASS_LIST[0] };
-            const [form, setForm] = useState(initialFormState);
+            const [assignments, setAssignments] = useState(db.assignments);
+            const [form, setForm] = useState({ title: '', content: '', className: CLASS_LIST[0] });
             const [editingId, setEditingId] = useState(null);
 
-            const createAssignmentNotifications = (assignment) => {
-                const affectedUsers = db.users.filter(user => user.className === assignment.className);
+            useEffect(() => {
+                setAssignments(db.assignments);
+            }, [db.assignments]);
+            
+            const createAssignmentNotification = (className, title) => {
+                const affectedUsers = db.users.filter(user => user.className === className);
                 const newNotifications = affectedUsers.map(user => ({
                     id: Date.now() + Math.random(),
                     userId: user.id,
                     type: 'new_assignment',
-                    content: `Tugas Baru: ${assignment.title}`,
-                    details: assignment.content,
+                    content: `Tugas baru ditambahkan: "${title}" untuk kelas ${className}.`,
                     timestamp: new Date().toISOString(),
                     isRead: false
                 }));
-                if(newNotifications.length > 0) {
+                if (newNotifications.length > 0) {
                     updateDb('notifications', [...db.notifications, ...newNotifications]);
                 }
+            };
+            
+            const handleChange = (e) => {
+                setForm({...form, [e.target.name]: e.target.value});
             };
 
             const handleSubmit = (e) => {
                 e.preventDefault();
+                if(!form.title || !form.content) {
+                    alert("Judul dan konten tugas tidak boleh kosong.");
+                    return;
+                }
+
                 let updatedAssignments;
                 if (editingId) {
-                    updatedAssignments = db.assignments.map(a => a.id === editingId ? {...a, ...form} : a);
+                    updatedAssignments = assignments.map(a => a.id === editingId ? { ...a, ...form } : a);
                 } else {
                     const newAssignment = { ...form, id: Date.now(), createdAt: new Date().toISOString() };
-                    updatedAssignments = [...db.assignments, newAssignment];
-                    createAssignmentNotifications(newAssignment);
+                    updatedAssignments = [...assignments, newAssignment];
+                    createAssignmentNotification(form.className, form.title);
                 }
                 updateDb('assignments', updatedAssignments);
-                setForm(initialFormState);
+                setForm({ title: '', content: '', className: CLASS_LIST[0] });
                 setEditingId(null);
             };
-            
+
             const handleEdit = (assignment) => {
                 setEditingId(assignment.id);
                 setForm({ title: assignment.title, content: assignment.content, className: assignment.className });
             };
 
             const handleDelete = (id) => {
-                if (confirm('Anda yakin ingin menghapus tugas ini?')) {
-                    updateDb('assignments', db.assignments.filter(a => a.id !== id));
+                if(confirm("Apakah Anda yakin ingin menghapus tugas ini?")) {
+                    updateDb('assignments', assignments.filter(a => a.id !== id));
                 }
-            };
-            
-            const cancelEdit = () => {
-                setEditingId(null);
-                setForm(initialFormState);
             };
 
             return (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                        <h3 className="font-bold text-lg text-green-700 mb-4">{editingId ? 'Edit Tugas' : 'Tambah Tugas Baru'}</h3>
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <input name="title" value={form.title} onChange={e => setForm(f => ({...f, title: e.target.value}))} placeholder="Judul Tugas" required className="w-full p-2 border rounded-md" />
-                            <textarea name="content" value={form.content} onChange={e => setForm(f => ({...f, content: e.target.value}))} placeholder="Deskripsi Tugas" required className="w-full p-2 border rounded-md h-24"></textarea>
-                            <select name="className" value={form.className} onChange={e => setForm(f => ({...f, className: e.target.value}))} className="w-full p-2 border rounded-md">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="md:col-span-1 p-4 bg-white rounded-lg shadow">
+                         <h3 className="font-bold text-lg mb-4">{editingId ? 'Edit Tugas' : 'Tambah Tugas Baru'}</h3>
+                         <form onSubmit={handleSubmit} className="space-y-4">
+                            <input type="text" name="title" placeholder="Judul Tugas" value={form.title} onChange={handleChange} className="w-full p-2 border rounded-md" />
+                            <textarea name="content" placeholder="Konten Tugas" value={form.content} onChange={handleChange} className="w-full p-2 border rounded-md h-32"></textarea>
+                            <select name="className" value={form.className} onChange={handleChange} className="w-full p-2 border rounded-md">
                                 {CLASS_LIST.map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
-                            <div className="flex space-x-2">
-                                <button type="submit" className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700">{editingId ? 'Simpan Perubahan' : 'Tambah Tugas'}</button>
-                                {editingId && <button type="button" onClick={cancelEdit} className="w-full bg-gray-500 text-white py-2 px-4 rounded-md hover:bg-gray-600">Batal</button>}
+                             <div className="flex gap-2">
+                                 <button type="submit" className="w-full bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600">{editingId ? 'Update' : 'Tambah'}</button>
+                                 {editingId && <button type="button" onClick={() => { setEditingId(null); setForm({ title: '', content: '', className: CLASS_LIST[0] });}} className="w-full bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600">Batal</button>}
                             </div>
-                        </form>
+                         </form>
                     </div>
-                    <div className="p-4 bg-white rounded-lg shadow-sm max-h-[60vh] overflow-y-auto">
-                        <h3 className="font-bold text-lg mb-4">Daftar Tugas</h3>
-                        <div className="space-y-4">
-                            {db.assignments.length > 0 ? [...db.assignments].reverse().map(assignment => (
-                                <div key={assignment.id} className="p-3 border rounded-md bg-gray-50">
-                                    <h4 className="font-semibold">{assignment.title} <span className="text-sm font-normal text-gray-500">- {assignment.className}</span></h4>
-                                    <p className="text-gray-700 my-1">{assignment.content}</p>
-                                    <small className="text-gray-400">Dibuat: {new Date(assignment.createdAt).toLocaleString('id-ID')}</small>
-                                    <div className="flex space-x-2 mt-2">
-                                        <button onClick={() => handleEdit(assignment)} className="text-blue-500 hover:underline text-sm">Edit</button>
-                                        <button onClick={() => handleDelete(assignment.id)} className="text-red-500 hover:underline text-sm">Hapus</button>
+                     <div className="md:col-span-2 p-4 bg-white rounded-lg shadow max-h-[70vh] overflow-y-auto">
+                         <h3 className="font-bold text-lg mb-4">Daftar Tugas</h3>
+                         <div className="space-y-4">
+                            {assignments.length > 0 ? [...assignments].reverse().map(assignment => (
+                                <div key={assignment.id} className="p-4 bg-gray-50 rounded-lg border">
+                                    <p className="font-bold">{assignment.title} <span className="text-sm font-normal text-gray-500">- {assignment.className}</span></p>
+                                    <p className="my-1">{assignment.content}</p>
+                                    <p className="text-xs text-gray-400">Dibuat: {new Date(assignment.createdAt).toLocaleString()}</p>
+                                     <div className="flex gap-2 mt-2">
+                                         <button onClick={() => handleEdit(assignment)} className="text-blue-500 hover:underline text-sm">Edit</button>
+                                         <button onClick={() => handleDelete(assignment.id)} className="text-red-500 hover:underline text-sm">Hapus</button>
                                     </div>
                                 </div>
                             )) : <p className="text-gray-500">Belum ada tugas.</p>}
-                        </div>
+                         </div>
                     </div>
                 </div>
             );
         }
 
         function UserNotesViewer({ notes, users }) {
-            const [selectedClass, setSelectedClass] = useState('all');
-            const classList = useMemo(() => ['all', ...new Set(users.filter(u => u.role === 'user').map(u => u.className))], [users]);
+            const userMap = useMemo(() => {
+                return users.reduce((map, user) => {
+                    map[user.id] = user;
+                    return map;
+                }, {});
+            }, [users]);
             
-            const notesWithUsernames = useMemo(() => {
-                return notes.map(note => {
-                    const user = users.find(u => u.id === note.userId);
-                    return { ...note, user: user || { username: 'Tidak diketahui', className: 'N/A' } };
-                });
-            }, [notes, users]);
-            
-            const filteredNotes = useMemo(() => {
-                if (selectedClass === 'all') return notesWithUsernames;
-                return notesWithUsernames.filter(note => note.user.className === selectedClass);
-            }, [selectedClass, notesWithUsernames]);
-
             return (
-                <div>
-                     <div className="mb-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Filter Berdasarkan Kelas:</label>
-                        <select value={selectedClass} onChange={(e) => setSelectedClass(e.target.value)} className="w-full md:w-1/3 p-2 border rounded-md">
-                            {classList.map(c => <option key={c} value={c}>{c === 'all' ? 'Semua Kelas' : c}</option>)}
-                        </select>
-                    </div>
-                    <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-2">
-                        {filteredNotes.length > 0 ? [...filteredNotes].reverse().map(note => (
-                            <div key={note.id} className="p-4 bg-white rounded-lg shadow-sm">
-                                <p className="font-semibold">{note.user.username} <span className="text-sm font-normal text-gray-500">({note.user.className})</span> - <span className="text-green-700">{note.date}</span></p>
-                                <p className="text-gray-700 mt-1">{note.content}</p>
-                            </div>
-                        )) : <p className="text-gray-500">Tidak ada catatan untuk kelas yang dipilih.</p>}
-                    </div>
+                 <div className="p-4 bg-white rounded-lg shadow max-h-[70vh] overflow-y-auto">
+                     <h3 className="font-bold text-lg mb-4">Catatan Semua User</h3>
+                     <div className="space-y-4">
+                        {notes.length > 0 ? notes.map(note => (
+                             <div key={note.id} className="p-3 bg-yellow-50 rounded-md border border-yellow-200">
+                                 <p className="font-semibold">
+                                    {userMap[note.userId] ? `${userMap[note.userId].username} (${userMap[note.userId].className})` : 'User tidak diketahui'}
+                                    <span className="text-sm font-normal text-gray-600"> - Catatan untuk hari {note.date}</span>
+                                 </p>
+                                 <p className="mt-1">{note.content}</p>
+                             </div>
+                        )) : <p className="text-gray-500">Belum ada catatan dari user.</p>}
+                     </div>
                 </div>
             );
         }
 
         function UserDashboard({ currentUser, db, updateDb, DAYS, onLogout }) {
-            const [activeTab, setActiveTab] = useState('schedule');
-            const [currentDayIndex] = useState(new Date().getDay());
-            const [isModalOpen, setIsModalOpen] = useState(false);
-            
-            const userNotifications = useMemo(() => 
-                db.notifications.filter(n => n.userId === currentUser.id).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)), 
-            [db.notifications, currentUser.id]);
+            const [activeTab, setActiveTab] = useState('today');
+            const [showNotifications, setShowNotifications] = useState(false);
 
-            const unreadCount = useMemo(() => 
-                userNotifications.filter(n => !n.isRead).length, 
-            [userNotifications]);
+            const userNotifications = useMemo(() => {
+                return db.notifications
+                    .filter(n => n.userId === currentUser.id)
+                    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            }, [db.notifications, currentUser.id]);
 
-            const scheduleForClass = db.schedules[currentUser.className] || {};
-            const assignmentsForClass = useMemo(() => 
-                db.assignments.filter(a => a.className === currentUser.className), 
-            [db.assignments, currentUser.className]);
+            const unreadCount = useMemo(() => {
+                return userNotifications.filter(n => !n.isRead).length;
+            }, [userNotifications]);
 
-            const notesForUser = useMemo(() => 
-                db.notes.filter(n => n.userId === currentUser.id),
-            [db.notes, currentUser.id]);
-
-            const formatTimestamp = (isoString) => {
-                const date = new Date(isoString);
-                return date.toLocaleString('id-ID', {
-                    weekday: 'long',
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
+            const handleMarkAsRead = () => {
+                const updatedNotifications = db.notifications.map(n => 
+                    n.userId === currentUser.id ? { ...n, isRead: true } : n
+                );
+                updateDb('notifications', updatedNotifications);
             };
 
-            const openModalAndMarkAsRead = () => {
-                setIsModalOpen(true);
-                if (unreadCount > 0) {
-                    const updatedNotifications = db.notifications.map(n => 
-                        (n.userId === currentUser.id && !n.isRead) ? { ...n, isRead: true } : n
-                    );
-                    updateDb('notifications', updatedNotifications);
+            const toggleNotifications = () => {
+                setShowNotifications(prev => !prev);
+                if (!showNotifications && unreadCount > 0) {
+                    handleMarkAsRead();
                 }
             };
-            
-            const handleDeleteNotification = (notifId) => {
-                updateDb('notifications', db.notifications.filter(n => n.id !== notifId));
-            };
-            
-            const handleDeleteAllNotifications = () => {
-                // **PERBAIKAN**: Menghapus 'confirm' agar tombol berfungsi
-                updateDb('notifications', db.notifications.filter(n => n.userId !== currentUser.id));
-            };
 
-            const updateNote = (day, content) => {
-                const newNotes = [...db.notes];
-                const noteIndex = newNotes.findIndex(n => n.userId === currentUser.id && n.date === day);
-                if(noteIndex > -1) {
-                    if(content) newNotes[noteIndex].content = content;
-                    else newNotes.splice(noteIndex, 1);
-                } else if(content) {
-                    newNotes.push({ id: Date.now(), userId: currentUser.id, date: day, content: content });
+            const renderContent = () => {
+                switch(activeTab) {
+                    case 'today':
+                        return <TodaySchedule currentUser={currentUser} schedule={db.schedules[currentUser.className]} DAYS={DAYS} />;
+                    case 'full_schedule':
+                        return <FullSchedule schedule={db.schedules[currentUser.className]} DAYS={DAYS} />;
+                    case 'assignments':
+                        return <AssignmentsView assignments={db.assignments.filter(a => a.className === currentUser.className)} />;
+                    case 'notes':
+                        return <UserNotes currentUser={currentUser} userNotes={db.notes.filter(n => n.userId === currentUser.id)} updateDb={updateDb} allNotes={db.notes} DAYS={DAYS} />;
+                    default: return null;
                 }
-                updateDb('notes', newNotes);
-            };
+            }
 
             return (
                 <div className="bg-white/80 backdrop-blur-md rounded-2xl shadow-xl p-6 min-h-[calc(100vh-4rem)]">
                     <header className="flex justify-between items-center mb-6 pb-4 border-b border-green-200">
                         <div className="flex items-center space-x-3">
-                           <TreeLogo />
-                           <div>
-                                <h1 className="text-2xl font-bold text-green-800">Dasbor Kelas {currentUser.className}</h1>
-                                <p className="text-sm text-gray-600">Selamat datang, {currentUser.username}</p>
-                           </div>
+                            <TreeLogo />
+                            <div>
+                                <h1 className="text-2xl font-bold text-green-800">Dasbor Siswa</h1>
+                                <p className="text-sm text-gray-600">Selamat datang, {currentUser.username} (Kelas {currentUser.className})</p>
+                            </div>
                         </div>
-                        <div className="flex items-center space-x-4">
-                            <NotificationIcon count={unreadCount} onClick={openModalAndMarkAsRead} />
+                        <div className="flex items-center gap-6">
+                            <NotificationIcon count={unreadCount} onClick={toggleNotifications} />
                             <button onClick={onLogout} className="px-4 py-2 text-sm font-medium rounded-md text-white bg-red-500 hover:bg-red-600 transition">Logout</button>
                         </div>
                     </header>
+
+                    {showNotifications && (
+                        <div className="absolute top-20 right-8 w-80 bg-white rounded-lg shadow-lg border z-20 max-h-96 overflow-y-auto">
+                           <div className="p-3 border-b font-semibold">Notifikasi</div>
+                           {userNotifications.length > 0 ? userNotifications.map(n => (
+                               <div key={n.id} className={`p-3 border-b text-sm ${!n.isRead ? 'bg-green-50' : ''}`}>
+                                   <p>{n.content}</p>
+                                   <p className="text-xs text-gray-400 mt-1">{new Date(n.timestamp).toLocaleString()}</p>
+                               </div>
+                           )) : <div className="p-3 text-sm text-gray-500">Tidak ada notifikasi baru.</div>}
+                        </div>
+                    )}
                     
-                    <nav className="flex border-b mb-6">
-                        <button onClick={() => setActiveTab('schedule')} className={`px-4 py-2 ${activeTab === 'schedule' ? 'border-b-2 border-green-600 font-semibold text-green-700' : 'text-gray-600'}`}>Jadwal & Catatan</button>
-                        <button onClick={() => setActiveTab('assignments')} className={`px-4 py-2 ${activeTab === 'assignments' ? 'border-b-2 border-green-600 font-semibold text-green-700' : 'text-gray-600'}`}>Tugas</button>
+                    <nav className="flex flex-wrap border-b mb-6 -mx-1">
+                         <button onClick={() => setActiveTab('today')} className={`px-4 py-2 rounded-t-lg mx-1 mb-[-1px] ${activeTab === 'today' ? 'bg-green-100 text-green-800 font-semibold border border-b-white border-gray-200' : 'text-gray-600 hover:bg-green-50'}`}>Jadwal Hari Ini</button>
+                         <button onClick={() => setActiveTab('full_schedule')} className={`px-4 py-2 rounded-t-lg mx-1 mb-[-1px] ${activeTab === 'full_schedule' ? 'bg-green-100 text-green-800 font-semibold border border-b-white border-gray-200' : 'text-gray-600 hover:bg-green-50'}`}>Jadwal Lengkap</button>
+                         <button onClick={() => setActiveTab('assignments')} className={`px-4 py-2 rounded-t-lg mx-1 mb-[-1px] ${activeTab === 'assignments' ? 'bg-green-100 text-green-800 font-semibold border border-b-white border-gray-200' : 'text-gray-600 hover:bg-green-50'}`}>Tugas</button>
+                         <button onClick={() => setActiveTab('notes')} className={`px-4 py-2 rounded-t-lg mx-1 mb-[-1px] ${activeTab === 'notes' ? 'bg-green-100 text-green-800 font-semibold border border-b-white border-gray-200' : 'text-gray-600 hover:bg-green-50'}`}>Catatan Saya</button>
                     </nav>
 
-                    {activeTab === 'schedule' && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {DAYS.map((day, index) => {
-                                const isToday = (currentDayIndex % 7) === (index + 1);
-                                const note = notesForUser.find(n => n.date === day);
-                                return (
-                                <div key={day} className={`p-4 rounded-lg shadow ${isToday ? 'bg-green-100 border-2 border-green-400' : 'bg-white'}`}>
-                                    <h3 className={`font-bold text-lg ${isToday ? 'text-green-800' : ''}`}>{day}</h3>
-                                    <ul className="mt-2 space-y-1 text-sm">
-                                        {(scheduleForClass[day] && scheduleForClass[day].length > 0) ? scheduleForClass[day].map((item, i) => (
-                                            <li key={i}>{item.start} - {item.end}: <strong>{item.subject}</strong></li>
-                                        )) : <li className="text-gray-400">Tidak ada jadwal.</li>}
-                                    </ul>
-                                    <textarea 
-                                        defaultValue={note ? note.content : ''}
-                                        onBlur={(e) => updateNote(day, e.target.value)}
-                                        placeholder="Catatan pribadi..."
-                                        className="w-full p-2 mt-4 border rounded-md text-sm bg-yellow-50 focus:bg-yellow-100 focus:ring-1 focus:ring-yellow-500"
-                                    ></textarea>
-                                </div>
-                            )})}
-                        </div>
-                    )}
+                    <div>{renderContent()}</div>
+                </div>
+            );
+        }
 
-                    {activeTab === 'assignments' && (
-                        <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-2">
-                             {assignmentsForClass.length > 0 ? [...assignmentsForClass].reverse().map(assignment => (
-                                <div key={assignment.id} className="p-4 bg-white rounded-lg shadow-sm border-l-4 border-green-500">
-                                    <h3 className="font-bold text-lg">{assignment.title}</h3>
-                                    <p className="text-gray-700 mt-1">{assignment.content}</p>
-                                    <small className="text-gray-400">Dibuat: {new Date(assignment.createdAt).toLocaleString('id-ID')}</small>
-                                </div>
-                             )) : <p className="text-gray-500">Tidak ada tugas untuk kelas Anda.</p>}
-                        </div>
-                    )}
-                    
-                    {isModalOpen && (
-                        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 p-4">
-                            <div className="bg-white rounded-lg p-6 max-w-2xl w-full shadow-2xl flex flex-col">
-                                <div className="flex justify-between items-center mb-4">
-                                    <h2 className="text-2xl font-bold text-gray-800">Riwayat Pemberitahuan</h2>
-                                    <button onClick={() => setIsModalOpen(false)} className="text-gray-500 hover:text-gray-800 text-3xl leading-none">&times;</button>
-                                </div>
-                                <div className="space-y-3 max-h-96 overflow-y-auto pr-2 flex-grow">
-                                  {userNotifications.length > 0 ? userNotifications.map(n => (
-                                    <div key={n.id} className="relative flex items-start space-x-3 p-3 bg-gray-50 border rounded-lg">
-                                      <div className={`flex-shrink-0 h-6 w-6 rounded-full flex items-center justify-center text-white ${n.type === 'new_assignment' ? 'bg-green-500' : 'bg-blue-500'}`}>
-                                        {n.type === 'new_assignment' ? 'T' : 'J'}
-                                      </div>
-                                      <div className="flex-1">
-                                        <p className={`font-semibold ${n.type === 'new_assignment' ? 'text-green-800' : 'text-blue-800'}`}>{n.content}</p>
-                                        {n.details && <p className="text-sm text-gray-600">{n.details}</p>}
-                                        <p className="text-xs text-gray-400 mt-1">{formatTimestamp(n.timestamp)}</p>
-                                      </div>
-                                      <button onClick={() => handleDeleteNotification(n.id)} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 font-bold">&times;</button>
-                                    </div>
-                                  )) : (
-                                    <p className="text-gray-500 text-center py-8">Tidak ada riwayat pemberitahuan.</p>
-                                  )}
-                                </div>
-                                <div className="flex justify-between items-center mt-6 pt-4 border-t">
-                                    <button 
-                                        onClick={handleDeleteAllNotifications} 
-                                        disabled={userNotifications.length === 0}
-                                        className="text-sm text-red-600 hover:underline disabled:text-gray-400 disabled:no-underline disabled:cursor-not-allowed"
-                                    >
-                                        Hapus Semua
-                                    </button>
-                                    <button onClick={() => setIsModalOpen(false)} className="bg-green-600 text-white py-2 px-6 rounded-md hover:bg-green-700 transition duration-200">
-                                        Tutup
-                                    </button>
-                                </div>
+        // --- USER DASHBOARD SUB-COMPONENTS ---
+        function TodaySchedule({ schedule, DAYS }) {
+            const todayIndex = (new Date().getDay() + 6) % 7; // Monday = 0, Sunday = 6
+            const todayName = todayIndex < 6 ? DAYS[todayIndex] : 'Minggu';
+            const todaySchedule = schedule ? schedule[todayName] : [];
+
+            return (
+                <div className="p-4 bg-white rounded-lg shadow">
+                    <h3 className="font-bold text-lg mb-4">Jadwal untuk hari {todayName}</h3>
+                    {todaySchedule && todaySchedule.length > 0 ? (
+                        <ul className="list-disc list-inside space-y-2">
+                            {todaySchedule.map((item, index) => (
+                                <li key={index}><strong>{item.start} - {item.end}</strong>: {item.subject}</li>
+                            ))}
+                        </ul>
+                    ) : <p className="text-gray-500">Tidak ada jadwal untuk hari ini.</p>}
+                </div>
+            );
+        }
+
+        function FullSchedule({ schedule, DAYS }) {
+             return (
+                <div className="p-4 bg-white rounded-lg shadow max-h-[70vh] overflow-y-auto">
+                    <h3 className="font-bold text-lg mb-4">Jadwal Lengkap</h3>
+                    <div className="space-y-4">
+                        {DAYS.map(day => (
+                            <div key={day}>
+                                <h4 className="font-semibold text-green-700">{day}</h4>
+                                {schedule && schedule[day] && schedule[day].length > 0 ? (
+                                    <ul className="list-disc list-inside space-y-2 mt-2">
+                                        {schedule[day].map((item, index) => (
+                                            <li key={index}><strong>{item.start} - {item.end}</strong>: {item.subject}</li>
+                                        ))}
+                                    </ul>
+                                ) : <p className="text-gray-500 text-sm italic mt-1">Tidak ada jadwal.</p>}
                             </div>
-                        </div>
-                    )}
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        function AssignmentsView({ assignments }) {
+            return (
+                <div className="p-4 bg-white rounded-lg shadow max-h-[70vh] overflow-y-auto">
+                     <h3 className="font-bold text-lg mb-4">Daftar Tugas</h3>
+                     <div className="space-y-4">
+                        {[...assignments].reverse().map(assignment => (
+                            <div key={assignment.id} className="p-4 bg-gray-50 rounded-lg border">
+                                <p className="font-bold">{assignment.title}</p>
+                                <p className="my-1">{assignment.content}</p>
+                                <p className="text-xs text-gray-400">Dibuat: {new Date(assignment.createdAt).toLocaleString()}</p>
+                            </div>
+                        ))}
+                        {assignments.length === 0 && <p className="text-gray-500">Tidak ada tugas saat ini.</p>}
+                     </div>
+                </div>
+            );
+        }
+
+        function UserNotes({ currentUser, userNotes, updateDb, allNotes, DAYS }) {
+            const [note, setNote] = useState('');
+            const [selectedDay, setSelectedDay] = useState(DAYS[0]);
+            const [editingId, setEditingId] = useState(null);
+
+            const handleDayChange = (e) => {
+                setSelectedDay(e.target.value);
+                const existingNote = userNotes.find(n => n.date === e.target.value);
+                if (existingNote) {
+                    setNote(existingNote.content);
+                    setEditingId(existingNote.id);
+                } else {
+                    setNote('');
+                    setEditingId(null);
+                }
+            };
+            
+            const handleSaveNote = () => {
+                if (!note.trim()) {
+                    alert("Catatan tidak boleh kosong.");
+                    return;
+                }
+                let updatedNotes;
+                if(editingId) {
+                    updatedNotes = allNotes.map(n => n.id === editingId ? {...n, content: note} : n);
+                } else {
+                    const newNote = {
+                        id: Date.now(),
+                        userId: currentUser.id,
+                        date: selectedDay,
+                        content: note
+                    };
+                    updatedNotes = [...allNotes, newNote];
+                }
+                updateDb('notes', updatedNotes);
+                alert(`Catatan untuk hari ${selectedDay} berhasil disimpan.`);
+            };
+            
+             const handleDeleteNote = () => {
+                if(!editingId || !confirm("Yakin ingin menghapus catatan ini?")) return;
+                const updatedNotes = allNotes.filter(n => n.id !== editingId);
+                updateDb('notes', updatedNotes);
+                setNote('');
+                setEditingId(null);
+             };
+
+            useEffect(() => {
+                handleDayChange({ target: { value: selectedDay } });
+            }, [userNotes, selectedDay]);
+
+
+            return (
+                 <div className="p-4 bg-white rounded-lg shadow">
+                     <h3 className="font-bold text-lg mb-4">Catatan Pribadi</h3>
+                     <div className="flex flex-wrap items-center gap-4 mb-4">
+                        <label htmlFor="day-select" className="font-semibold">Pilih Hari:</label>
+                        <select id="day-select" value={selectedDay} onChange={handleDayChange} className="p-2 border rounded-md">
+                            {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                    </div>
+                    <textarea 
+                        value={note} 
+                        onChange={(e) => setNote(e.target.value)}
+                        placeholder={`Tulis catatan untuk hari ${selectedDay}...`}
+                        className="w-full p-2 border rounded-md h-40 mb-4"
+                    />
+                    <div className="flex gap-2">
+                        <button onClick={handleSaveNote} className="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600">Simpan Catatan</button>
+                        {editingId && <button onClick={handleDeleteNote} className="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600">Hapus</button>}
+                    </div>
                 </div>
             );
         }
@@ -1019,7 +1079,6 @@
         const root = ReactDOM.createRoot(container);
         root.render(<App />);
     </script>
+
 </body>
 </html>
-
-
