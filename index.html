@@ -886,6 +886,21 @@
                     handleMarkAsRead();
                 }
             };
+            
+            // --- FUNGSI BARU UNTUK HAPUS NOTIFIKASI ---
+            const handleDeleteOneNotification = (e, notificationId) => {
+                e.stopPropagation(); // Mencegah dropdown tertutup saat tombol X diklik
+                const updatedNotifications = db.notifications.filter(n => n.id !== notificationId);
+                updateDb('notifications', updatedNotifications);
+            };
+            
+            const handleDeleteAllNotifications = (e) => {
+                e.stopPropagation();
+                if (confirm('Apakah Anda yakin ingin menghapus semua notifikasi?')) {
+                    const updatedNotifications = db.notifications.filter(n => n.userId !== currentUser.id);
+                    updateDb('notifications', updatedNotifications);
+                }
+            };
 
             const renderContent = () => {
                 switch(activeTab) {
@@ -918,14 +933,24 @@
                     </header>
 
                     {showNotifications && (
-                        <div className="absolute top-20 right-8 w-80 bg-white rounded-lg shadow-lg border z-20 max-h-96 overflow-y-auto">
-                           <div className="p-3 border-b font-semibold">Notifikasi</div>
-                           {userNotifications.length > 0 ? userNotifications.map(n => (
-                               <div key={n.id} className={`p-3 border-b text-sm ${!n.isRead ? 'bg-green-50' : ''}`}>
-                                   <p>{n.content}</p>
-                                   <p className="text-xs text-gray-400 mt-1">{new Date(n.timestamp).toLocaleString()}</p>
+                        <div className="absolute top-20 right-8 w-80 bg-white rounded-lg shadow-lg border z-20 max-h-96 flex flex-col">
+                           <div className="p-3 border-b font-semibold text-center">Notifikasi</div>
+                           <div className="overflow-y-auto">
+                               {userNotifications.length > 0 ? userNotifications.map(n => (
+                                   <div key={n.id} className={`p-3 border-b text-sm flex justify-between items-start ${!n.isRead ? 'bg-green-50' : ''}`}>
+                                       <div>
+                                           <p>{n.content}</p>
+                                           <p className="text-xs text-gray-400 mt-1">{new Date(n.timestamp).toLocaleString()}</p>
+                                       </div>
+                                       <button onClick={(e) => handleDeleteOneNotification(e, n.id)} className="text-red-500 hover:text-red-700 font-bold ml-2 p-1">&times;</button>
+                                   </div>
+                               )) : <div className="p-3 text-sm text-gray-500">Tidak ada notifikasi.</div>}
+                           </div>
+                           {userNotifications.length > 0 && (
+                               <div className="p-2 border-t mt-auto">
+                                   <button onClick={handleDeleteAllNotifications} className="w-full text-center text-sm text-red-600 hover:bg-red-50 rounded p-1">Hapus Semua Notifikasi</button>
                                </div>
-                           )) : <div className="p-3 text-sm text-gray-500">Tidak ada notifikasi baru.</div>}
+                           )}
                         </div>
                     )}
                     
@@ -1082,3 +1107,4 @@
 
 </body>
 </html>
+
