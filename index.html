@@ -1,1100 +1,1243 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aplikasi Jadwal Kelas</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        /* A simple font to match the app's aesthetic */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-        body {
-            font-family: 'Inter', sans-serif;
-            overflow-x: hidden; /* Mencegah scroll horizontal karena animasi */
-        }
-        /* Custom style for file input */
-        .file-input-button {
-            cursor: pointer;
-            padding: 0.5rem 1rem;
-            border-radius: 0.375rem;
-            color: white;
-            transition: background-color 0.2s;
-        }
-        .file-input-label {
-            margin-left: 0.5rem;
-            color: #D1D5DB; /* gray-300 */
-        }
-        
-        /* Animasi Transisi Halaman */
-        @keyframes slideInFromRight {
-            0% {
-                transform: translateX(30px);
-                opacity: 0;
-            }
-            100% {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-        .page-slide-in {
-            animation: slideInFromRight 0.5s ease-out forwards;
-        }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aplikasi Jadwal Kelas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* A simple font to match the app's aesthetic */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden; /* Mencegah scroll horizontal karena animasi */
+        }
+        /* Custom style for file input */
+        .file-input-button {
+            cursor: pointer;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            color: white;
+            transition: background-color 0.2s;
+        }
+        .file-input-label {
+            margin-left: 0.5rem;
+            color: #D1D5DB; /* gray-300 */
+        }
+        
+        /* Animasi Transisi Halaman */
+        @keyframes slideInFromRight {
+            0% {
+                transform: translateX(30px);
+                opacity: 0;
+            }
+            100% {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        .page-slide-in {
+            animation: slideInFromRight 0.5s ease-out forwards;
+        }
 
-        /* Styling for scrollbars */
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #1F2937; /* gray-800 */
-            border-radius: 10px;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #4B5563; /* gray-600 */
-            border-radius: 10px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #6B7280; /* gray-500 */
-        }
-    </style>
+        /* Styling for scrollbars */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1F2937; /* gray-800 */
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4B5563; /* gray-600 */
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6B7280; /* gray-500 */
+        }
+    </style>
 </head>
 <body>
-    <div id="root"></div>
-
-    <!-- React Libraries -->
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-
-    <!-- Babel to transpile JSX in the browser -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <!-- SheetJS/xlsx for reading Excel files -->
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
-
-    <script type="text/babel">
-        const { useState, useEffect, useCallback, useMemo, useRef } = React;
-
-        // --- SVG ICON COMPONENTS ---
-        const StarLogo = () => (
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" style={{stopColor: '#FFD700', stopOpacity: 1}} />
-                <stop offset="100%" style={{stopColor: '#FFA500', stopOpacity: 1}} />
-              </linearGradient>
-            </defs>
-            <path d="M12 2L14.09 8.26L20 9.27L15.55 13.97L16.91 20L12 16.54L7.09 20L8.45 13.97L4 9.27L9.91 8.26L12 2Z" fill="url(#goldGradient)" stroke="#FFC700" strokeWidth="0.5"/>
-          </svg>
-        );
-
-        const NotificationIcon = ({ count, onClick }) => (
-            <div className="relative cursor-pointer" onClick={onClick}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-300">
-                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                </svg>
-                {count > 0 && (
-                    <span className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white ring-2 ring-gray-800">
-                        {count > 99 ? '99+' : count}
-                    </span>
-                )}
-            </div>
-        );
-
-        // --- UTILITY HOOKS & COMPONENTS ---
-        const useModal = () => {
-            const [modalState, setModalState] = useState({ isOpen: false, message: '', onConfirm: null, type: 'alert' });
-
-            const showModal = (message, onConfirmCallback = null) => {
-                setModalState({
-                    isOpen: true,
-                    message,
-                    onConfirm: onConfirmCallback,
-                    type: onConfirmCallback ? 'confirm' : 'alert',
-                });
-            };
-
-            const hideModal = () => {
-                setModalState({ isOpen: false, message: '', onConfirm: null, type: 'alert' });
-            };
-
-            const handleConfirm = () => {
-                if (modalState.onConfirm) {
-                    modalState.onConfirm();
-                }
-                hideModal();
-            };
-
-            const ModalComponent = () => {
-                if (!modalState.isOpen) return null;
-                return (
-                    <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 p-4">
-                        <div className="bg-gray-800 border border-purple-400 rounded-lg shadow-xl p-6 w-full max-w-sm text-center">
-                            <p className="mb-6 text-gray-200">{modalState.message}</p>
-                            <div className="flex justify-center space-x-4">
-                                {modalState.type === 'confirm' && (
-                                    <button onClick={hideModal} className="px-4 py-2 rounded-md bg-gray-600 text-gray-100 hover:bg-gray-500">
-                                        Batal
-                                    </button>
-                                )}
-                                <button onClick={handleConfirm} className="px-4 py-2 rounded-md bg-purple-600 text-white hover:bg-purple-700">
-                                    {modalState.type === 'confirm' ? 'Ya, Lanjutkan' : 'OK'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                );
-            };
-
-            return { ModalComponent, showModal };
-        };
-
-        // --- INITIAL DATABASE SETUP ---
-        const useDatabase = () => {
-            const initializeData = () => {
-                console.log("Initializing database for the first time...");
-                const initialUsers = [
-                    { id: 1, username: 'superadmin', password: 'superadmin', role: 'admin', approved: true },
-                    { id: 2, username: 'admin', password: 'admin', role: 'admin', approved: true },
-                    { id: 3, username: 'XI-A_user', password: 'password', role: 'user', className: 'XI-A', approved: true },
-                ];
-                const initialSchedules = {
-                    'XI-A': {
-                        Senin: [{ start: '07:00', end: '08:30', subject: 'Matematika' }, { start: '08:30', end: '10:00', subject: 'Fisika' }],
-                        Selasa: [{ start: '07:00', end: '08:30', subject: 'Kimia' }],
-                    }
-                };
-                const initialAssignments = [
-                    { id: 1, title: 'Tugas Kalkulus', content: 'Kerjakan LKS hal 50.', className: 'XI-A', createdAt: new Date().toISOString() }
-                ];
-                const initialNotes = [
-                    { id: 1, userId: 3, date: 'Senin', content: 'Jangan lupa bawa kalkulator.' }
-                ];
-                const initialNotifications = [
-                     { id: 1, userId: 3, message: 'Tugas baru ditambahkan: Tugas Kalkulus', read: false, createdAt: new Date().toISOString() }
-                ];
-
-                localStorage.setItem('users', JSON.stringify(initialUsers));
-                localStorage.setItem('schedules', JSON.stringify(initialSchedules));
-                localStorage.setItem('assignments', JSON.stringify(initialAssignments));
-                localStorage.setItem('notes', JSON.stringify(initialNotes));
-                localStorage.setItem('pendingUsers', JSON.stringify([]));
-                localStorage.setItem('notifications', JSON.stringify(initialNotifications));
-                
-                return { 
-                    users: initialUsers, 
-                    schedules: initialSchedules, 
-                    assignments: initialAssignments, 
-                    notes: initialNotes, 
-                    pendingUsers: [],
-                    notifications: initialNotifications 
-                };
-            };
-
-            const loadData = (key, defaultValue = []) => {
-                try {
-                    const data = localStorage.getItem(key);
-                    return data ? JSON.parse(data) : defaultValue;
-                } catch (error) {
-                    console.error(`Error loading ${key} from localStorage`, error);
-                    return defaultValue;
-                }
-            };
-            
-            const [db, setDb] = useState(() => {
-                const isInitialized = localStorage.getItem('users');
-                if (!isInitialized) {
-                    return initializeData();
-                }
-                return {
-                    users: loadData('users'),
-                    schedules: loadData('schedules', {}),
-                    assignments: loadData('assignments'),
-                    notes: loadData('notes'),
-                    pendingUsers: loadData('pendingUsers'),
-                    notifications: loadData('notifications', []),
-                };
-            });
-
-            const updateDb = (key, data) => {
-                localStorage.setItem(key, JSON.stringify(data));
-                setDb(prevDb => ({ ...prevDb, [key]: data }));
-            };
-
-            return { db, updateDb };
-        };
-
-
-        // --- MAIN APP COMPONENT ---
-        function App() {
-            const { db, updateDb } = useDatabase();
-            const [currentUser, setCurrentUser] = useState(null);
-            const [page, setPage] = useState('login');
-            const [backgroundPos, setBackgroundPos] = useState(0);
-            const { ModalComponent, showModal } = useModal();
-
-            const CLASS_LIST = useMemo(() => {
-                const grades = ['X', 'XI', 'XII'];
-                const majors = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
-                return grades.flatMap(grade => majors.map(major => `${grade}-${major}`));
-            }, []);
-
-            const DAYS = useMemo(() => ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'], []);
-
-            useEffect(() => {
-                const sessionUser = sessionStorage.getItem('currentUser');
-                if (sessionUser) {
-                    const user = JSON.parse(sessionUser);
-                    setCurrentUser(user);
-                    setPage(user.role);
-                }
-            }, []);
-
-            const navigate = (newPage) => {
-                setPage(newPage);
-                if (newPage !== 'login' && page === 'login') {
-                    setBackgroundPos(prev => prev - 150);
-                }
-            };
-
-            const handleLogin = ({ username, password }) => {
-                const user = db.users.find(u => u.username === username && u.password === password);
-                if (user && user.approved) {
-                    setCurrentUser(user);
-                    sessionStorage.setItem('currentUser', JSON.stringify(user));
-                    navigate(user.role);
-                    return true;
-                }
-                showModal('Username atau password salah, atau akun belum disetujui.');
-                return false;
-            };
-            
-            const handleRegister = ({ username, password, className, role }) => {
-                if (db.users.some(u => u.username === username) || db.pendingUsers.some(u => u.username === username)) {
-                    showModal('Username sudah digunakan atau sedang dalam proses persetujuan.');
-                    return false;
-                }
-                
-                const newUser = {
-                    id: Date.now(),
-                    username,
-                    password,
-                    role,
-                    className: role === 'user' ? className : null,
-                    approved: false
-                };
-
-                updateDb('pendingUsers', [...db.pendingUsers, newUser]);
-                showModal('Registrasi berhasil! Akun Anda sedang menunggu persetujuan dari Admin.');
-                return true;
-            };
-
-            const handleLogout = () => {
-                setCurrentUser(null);
-                sessionStorage.removeItem('currentUser');
-                setBackgroundPos(0);
-                navigate('login');
-            };
-
-            const renderPage = () => {
-                switch (page) {
-                    case 'admin':
-                        return <AdminDashboard 
-                                currentUser={currentUser} 
-                                db={db} 
-                                updateDb={updateDb} 
-                                CLASS_LIST={CLASS_LIST} 
-                                DAYS={DAYS} 
-                                onLogout={handleLogout} 
-                                showModal={showModal}
-                                />;
-                    case 'user':
-                        return <UserDashboard 
-                                currentUser={currentUser} 
-                                db={db} 
-                                updateDb={updateDb} 
-                                DAYS={DAYS} 
-                                onLogout={handleLogout}
-                                showModal={showModal}
-                                />;
-                    default:
-                        return <LoginPage onLogin={handleLogin} onRegister={handleRegister} CLASS_LIST={CLASS_LIST} showModal={showModal} />;
-                }
-            };
-
-            return (
-                <div className="min-h-screen bg-gray-900 font-sans text-gray-200">
-                    <ModalComponent />
-                    <div 
-                        className="fixed inset-0 z-0 bg-cover bg-center transition-transform duration-1000 ease-in-out"
-                        style={{
-                            backgroundImage: "url('https://images.unsplash.com/photo-1506442682393-205b5546f345?q=80&w=2574&auto=format&fit=crop')",
-                            transform: `translateX(${backgroundPos}px)`
-                        }}
-                    ></div>
-                    <div className="fixed inset-0 bg-black/50 z-0"></div>
-
-                    <main className="relative z-10">
-                        <div key={page} className="page-slide-in p-4 sm:p-6 md:p-8">
-                           {renderPage()}
-                        </div>
-                    </main>
-                </div>
-            );
-        }
-        
-        // --- AUTHENTICATION PAGE ---
-        function LoginPage({ onLogin, onRegister, CLASS_LIST, showModal }) {
-            const [isRegister, setIsRegister] = useState(false);
-            const [form, setForm] = useState({ username: '', password: '', className: CLASS_LIST[0], role: 'user' });
-            const [confirmPassword, setConfirmPassword] = useState('');
-
-            const handleChange = (e) => {
-                const { name, value } = e.target;
-                setForm(prev => ({ ...prev, [name]: value }));
-            };
-
-            const handleSubmit = (e) => {
-                e.preventDefault();
-                if (isRegister) {
-                    if (form.password !== confirmPassword) {
-                        showModal("Password tidak cocok!");
-                        return;
-                    }
-                    if(onRegister(form)) {
-                        setIsRegister(false);
-                        setForm({ username: '', password: '', className: CLASS_LIST[0], role: 'user' });
-                        setConfirmPassword('');
-                    }
-                } else {
-                    onLogin(form);
-                }
-            };
-
-            return (
-                <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)]">
-                    <div className="w-full max-w-md p-8 space-y-6 bg-gray-800/80 backdrop-blur-md rounded-2xl shadow-2xl border border-purple-400/30">
-                        <div className="flex justify-center">
-                            <StarLogo />
-                        </div>
-                        <h2 className="text-center text-3xl font-extrabold text-white">{isRegister ? 'Buat Akun Baru' : 'Selamat Datang'}</h2>
-                        
-                        <form className="space-y-6" onSubmit={handleSubmit}>
-                            <div className="space-y-4 rounded-md">
-                                <input name="username" type="text" required value={form.username} onChange={handleChange} className="w-full px-3 py-2 border border-gray-600 bg-gray-700 placeholder-gray-400 text-white rounded-md focus:outline-none focus:ring-purple-500 focus:border-purple-500" placeholder="Username" />
-                                <input name="password" type="password" required value={form.password} onChange={handleChange} className="w-full px-3 py-2 border border-gray-600 bg-gray-700 placeholder-gray-400 text-white rounded-md focus:outline-none focus:ring-purple-500 focus:border-purple-500" placeholder="Password" />
-                                {isRegister && (
-                                    <>
-                                        <input name="confirmPassword" type="password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full px-3 py-2 border border-gray-600 bg-gray-700 placeholder-gray-400 text-white rounded-md focus:outline-none focus:ring-purple-500 focus:border-purple-500" placeholder="Konfirmasi Password" />
-                                        <div className="flex items-center space-x-4 text-white">
-                                            <label><input type="radio" name="role" value="user" checked={form.role === 'user'} onChange={handleChange} className="text-purple-500 focus:ring-purple-600" /> User</label>
-                                            <label><input type="radio" name="role" value="admin" checked={form.role === 'admin'} onChange={handleChange} className="text-purple-500 focus:ring-purple-600"/> Admin</label>
-                                        </div>
-                                        {form.role === 'user' && (
-                                            <select name="className" value={form.className} onChange={handleChange} className="w-full px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-md focus:outline-none focus:ring-purple-500 focus:border-purple-500">
-                                                {CLASS_LIST.map(c => <option key={c} value={c}>{c}</option>)}
-                                            </select>
-                                        )}
-                                    </>
-                                )}
-                            </div>
-                            <button type="submit" className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 focus:ring-offset-gray-800 transition duration-150 ease-in-out">
-                                {isRegister ? 'Daftar' : 'Login'}
-                            </button>
-                        </form>
-
-                        <p className="text-center text-sm text-gray-300">
-                            {isRegister ? 'Sudah punya akun?' : 'Belum punya akun?'}
-                            <button onClick={() => setIsRegister(!isRegister)} className="ml-1 font-medium text-purple-400 hover:text-purple-300">
-                                {isRegister ? 'Login di sini' : 'Daftar sekarang'}
-                            </button>
-                        </p>
-                    </div>
-                </div>
-            );
-        }
-        
-        // --- ADMIN DASHBOARD AND COMPONENTS ---
-        function AdminDashboard({ currentUser, db, updateDb, CLASS_LIST, DAYS, onLogout, showModal }) {
-            const [activeTab, setActiveTab] = useState('approval');
-
-            const handleApproval = (userId, isApproved) => {
-                const userToProcess = db.pendingUsers.find(u => u.id === userId);
-                if (!userToProcess) return;
-
-                if (isApproved) {
-                    const approvedUser = { ...userToProcess, approved: true };
-                    updateDb('users', [...db.users, approvedUser]);
-                    showModal(`Registrasi ${userToProcess.username} disetujui.`);
-                } else {
-                    showModal(`Registrasi ${userToProcess.username} ditolak.`);
-                }
-                
-                updateDb('pendingUsers', db.pendingUsers.filter(u => u.id !== userId));
-            };
-            
-            return (
-                <div className="bg-gray-800/80 backdrop-blur-md rounded-2xl shadow-xl p-6 min-h-[calc(100vh-4rem)] border border-purple-400/30">
-                    <header className="flex justify-between items-center mb-6 pb-4 border-b border-purple-400/30">
-                        <div className="flex items-center space-x-3">
-                            <StarLogo />
-                            <div>
-                                <h1 className="text-2xl font-bold text-white">Dasbor Admin</h1>
-                                <p className="text-sm text-gray-400">Selamat datang, {currentUser.username}</p>
-                            </div>
-                        </div>
-                        <button onClick={onLogout} className="px-4 py-2 text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 transition">Logout</button>
-                    </header>
-                    
-                    <nav className="flex flex-wrap border-b border-purple-400/30 mb-6 -mx-1">
-                        <button onClick={() => setActiveTab('approval')} className={`px-4 py-2 rounded-t-lg mx-1 mb-[-1px] transition-colors ${activeTab === 'approval' ? 'bg-gray-700 text-purple-300 font-semibold border border-b-gray-700 border-purple-400/30' : 'text-gray-400 hover:bg-gray-700/50'}`}>Persetujuan ({db.pendingUsers.length})</button>
-                        <button onClick={() => setActiveTab('user_management')} className={`px-4 py-2 rounded-t-lg mx-1 mb-[-1px] transition-colors ${activeTab === 'user_management' ? 'bg-gray-700 text-purple-300 font-semibold border border-b-gray-700 border-purple-400/30' : 'text-gray-400 hover:bg-gray-700/50'}`}>Manajemen User</button>
-                        <button onClick={() => setActiveTab('schedule')} className={`px-4 py-2 rounded-t-lg mx-1 mb-[-1px] transition-colors ${activeTab === 'schedule' ? 'bg-gray-700 text-purple-300 font-semibold border border-b-gray-700 border-purple-400/30' : 'text-gray-400 hover:bg-gray-700/50'}`}>Manajemen Jadwal</button>
-                        <button onClick={() => setActiveTab('assignments')} className={`px-4 py-2 rounded-t-lg mx-1 mb-[-1px] transition-colors ${activeTab === 'assignments' ? 'bg-gray-700 text-purple-300 font-semibold border border-b-gray-700 border-purple-400/30' : 'text-gray-400 hover:bg-gray-700/50'}`}>Manajemen Tugas</button>
-                        <button onClick={() => setActiveTab('notes')} className={`px-4 py-2 rounded-t-lg mx-1 mb-[-1px] transition-colors ${activeTab === 'notes' ? 'bg-gray-700 text-purple-300 font-semibold border border-b-gray-700 border-purple-400/30' : 'text-gray-400 hover:bg-gray-700/50'}`}>Catatan User</button>
-                    </nav>
-
-                    <div className="transition-all duration-300">
-                        {activeTab === 'approval' && <RegistrationApproval currentUser={currentUser} pendingUsers={db.pendingUsers} onApprove={handleApproval} updateDb={updateDb} existingUsers={db.users} showModal={showModal}/>}
-                        {activeTab === 'user_management' && <UserManager currentUser={currentUser} db={db} updateDb={updateDb} CLASS_LIST={CLASS_LIST} showModal={showModal} />}
-                        {activeTab === 'schedule' && <ScheduleManager db={db} updateDb={updateDb} CLASS_LIST={CLASS_LIST} DAYS={DAYS} showModal={showModal} />}
-                        {activeTab === 'assignments' && <AssignmentManager db={db} updateDb={updateDb} CLASS_LIST={CLASS_LIST} showModal={showModal} />}
-                        {activeTab === 'notes' && <UserNotesViewer notes={db.notes} users={db.users} />}
-                    </div>
-                </div>
-            );
-        }
-        
-        function RegistrationApproval({ currentUser, pendingUsers, onApprove, updateDb, existingUsers, showModal }) {
-            const userFileInputRef = useRef(null);
-            const [userFileName, setUserFileName] = useState('');
-            const isSuperAdmin = currentUser.username === 'superadmin';
-            const adminFileInputRef = useRef(null);
-            const [adminFileName, setAdminFileName] = useState('');
-
-            const processUserData = (data) => {
-                const newPendingUsers = [];
-                const allUsernames = new Set([...existingUsers.map(u => u.username), ...pendingUsers.map(u => u.username)]);
-                
-                data.forEach(row => {
-                    const { username, password, className } = row;
-                    if (username && password && className && !allUsernames.has(username)) {
-                        newPendingUsers.push({
-                            id: Date.now() + Math.random(),
-                            username,
-                            password: String(password),
-                            className,
-                            role: 'user',
-                            approved: false
-                        });
-                        allUsernames.add(username);
-                    }
-                });
-
-                if (newPendingUsers.length > 0) {
-                    updateDb('pendingUsers', [...pendingUsers, ...newPendingUsers]);
-                    showModal(`${newPendingUsers.length} user baru dari file telah ditambahkan ke daftar persetujuan.`);
-                } else {
-                    showModal('Tidak ada user baru yang valid untuk ditambahkan. Pastikan file memiliki kolom header "username", "password", "className" dan tidak ada username yang duplikat.');
-                }
-            };
-
-            const handleUserFileChange = (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
-                setUserFileName(file.name);
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    try {
-                        const data = new Uint8Array(e.target.result);
-                        const workbook = XLSX.read(data, { type: 'array' });
-                        const firstSheetName = workbook.SheetNames[0];
-                        const worksheet = workbook.Sheets[firstSheetName];
-                        const jsonData = XLSX.utils.sheet_to_json(worksheet);
-                        processUserData(jsonData);
-                    } catch (error) {
-                         showModal('Gagal memproses file: ' + error.message);
-                    }
-                };
-                reader.readAsArrayBuffer(file);
-                if(userFileInputRef.current) userFileInputRef.current.value = '';
-                setUserFileName('');
-            };
-            
-            const processAdminData = (data) => {
-                const newPendingAdmins = [];
-                const allUsernames = new Set([...existingUsers.map(u => u.username), ...pendingUsers.map(u => u.username)]);
-                
-                data.forEach(row => {
-                    const { username, password } = row;
-                    if (username && password && !allUsernames.has(username)) {
-                        newPendingAdmins.push({
-                            id: Date.now() + Math.random(),
-                            username,
-                            password: String(password),
-                            className: null,
-                            role: 'admin',
-                            approved: false
-                        });
-                        allUsernames.add(username);
-                    }
-                });
-
-                if (newPendingAdmins.length > 0) {
-                    updateDb('pendingUsers', [...pendingUsers, ...newPendingAdmins]);
-                    showModal(`${newPendingAdmins.length} admin baru dari file telah ditambahkan ke daftar persetujuan.`);
-                } else {
-                    showModal('Tidak ada admin baru yang valid untuk ditambahkan. Pastikan file memiliki kolom header "username" dan "password", dan tidak ada username yang duplikat.');
-                }
-            };
-
-            const handleAdminFileChange = (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
-                setAdminFileName(file.name);
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    try {
-                        const data = new Uint8Array(e.target.result);
-                        const workbook = XLSX.read(data, { type: 'array' });
-                        const firstSheetName = workbook.SheetNames[0];
-                        const worksheet = workbook.Sheets[firstSheetName];
-                        const jsonData = XLSX.utils.sheet_to_json(worksheet);
-                        processAdminData(jsonData);
-                    } catch (error) {
-                         showModal('Gagal memproses file: ' + error.message);
-                    }
-                };
-                reader.readAsArrayBuffer(file);
-                if(adminFileInputRef.current) adminFileInputRef.current.value = '';
-                setAdminFileName('');
-            };
-
-            const usersToDisplay = isSuperAdmin ? pendingUsers : pendingUsers.filter(u => u.role === 'user');
-
-            return (
-                <div>
-                     <div className="p-4 bg-gray-700/50 rounded-lg border border-purple-400/30 mb-6">
-                         <h3 className="font-bold text-lg text-purple-300 mb-2">Impor User (Siswa) dari File</h3>
-                         <p className="text-sm text-gray-400 mb-4">
-                             Unggah file <strong>Excel (.xlsx, .xls)</strong>.
-                             Pastikan file memiliki kolom header: <strong>username, password, className</strong>.
-                         </p>
-                         <input type="file" accept=".xlsx,.xls" ref={userFileInputRef} onChange={handleUserFileChange} className="hidden" id="user-file-importer" />
-                         <label htmlFor="user-file-importer" className="file-input-button bg-purple-600 hover:bg-purple-700">Pilih File User</label>
-                         {userFileName && <span className="file-input-label">{userFileName}</span>}
-                     </div>
-
-                    {isSuperAdmin && (
-                         <div className="p-4 bg-gray-700/50 rounded-lg border border-blue-400/30 mb-6">
-                             <h3 className="font-bold text-lg text-blue-300 mb-2">Impor Admin dari File (Superadmin Only)</h3>
-                             <p className="text-sm text-gray-400 mb-4">
-                                 Unggah file <strong>Excel (.xlsx, .xls)</strong>.
-                                 Pastikan file memiliki kolom header: <strong>username, password</strong>.
-                             </p>
-                             <input type="file" accept=".xlsx,.xls" ref={adminFileInputRef} onChange={handleAdminFileChange} className="hidden" id="admin-file-importer" />
-                             <label htmlFor="admin-file-importer" className="file-input-button bg-blue-600 hover:bg-blue-700">Pilih File Admin</label>
-                             {adminFileName && <span className="file-input-label">{adminFileName}</span>}
-                         </div>
-                    )}
-
-                    <h3 className="font-bold text-lg mb-4 text-white">Daftar Registrasi Menunggu Persetujuan</h3>
-                    <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-2">
-                        {usersToDisplay.length > 0 ? usersToDisplay.map(user => (
-                            <div key={user.id} className="flex flex-wrap justify-between items-center p-3 bg-gray-700 rounded-md shadow-sm">
-                                <div>
-                                    <p>Username: <span className="font-semibold text-white">{user.username}</span></p>
-                                    <p className="text-sm text-gray-400">
-                                        Role: <span className="capitalize font-medium">{user.role}</span>
-                                        {user.role === 'user' && ` - Kelas: ${user.className}`}
-                                    </p>
-                                </div>
-                                <div className="flex space-x-2 mt-2 sm:mt-0">
-                                    <button onClick={() => onApprove(user.id, true)} className="bg-green-600 text-white px-3 py-1 rounded-md text-sm hover:bg-green-700">Setujui</button>
-                                    <button onClick={() => onApprove(user.id, false)} className="bg-red-600 text-white px-3 py-1 rounded-md text-sm hover:bg-red-700">Tolak</button>
-                                </div>
-                            </div>
-                        )) : <p className="text-gray-400">Tidak ada pendaftaran yang menunggu persetujuan.</p>}
-                    </div>
-                </div>
-            );
-        }
-
-        function UserManager({ currentUser, db, updateDb, CLASS_LIST, showModal }) {
-            const [selectedClass, setSelectedClass] = useState('Semua Kelas');
-            const [searchTerm, setSearchTerm] = useState('');
-            const isSuperAdmin = currentUser.username === 'superadmin';
-
-            const filteredUsers = useMemo(() => {
-                return db.users
-                    .filter(user => user.role === 'user')
-                    .filter(user => selectedClass === 'Semua Kelas' || user.className === selectedClass)
-                    .filter(user => user.username.toLowerCase().includes(searchTerm.toLowerCase()));
-            }, [db.users, selectedClass, searchTerm]);
-
-            const admins = useMemo(() => db.users.filter(user => user.role === 'admin'), [db.users]);
-
-            const handleDeleteOne = (userId, username) => {
-                showModal(`Apakah Anda yakin ingin menghapus user: ${username}?`, () => {
-                    const updatedUsers = db.users.filter(user => user.id !== userId);
-                    updateDb('users', updatedUsers);
-                });
-            };
-            
-            const handleDeleteByClass = () => {
-                if (selectedClass === 'Semua Kelas') {
-                    showModal('Silakan pilih kelas spesifik yang ingin dihapus.');
-                    return;
-                }
-                showModal(`PERINGATAN: Anda akan menghapus SEMUA user dari kelas ${selectedClass}. Aksi ini tidak dapat dibatalkan. Lanjutkan?`, () => {
-                    const updatedUsers = db.users.filter(user => user.role !== 'user' || user.className !== selectedClass);
-                    updateDb('users', updatedUsers);
-                });
-            };
-
-            const handleDeleteAdmin = (adminId, adminUsername) => {
-                if(adminUsername === 'superadmin') {
-                    showModal('Tidak dapat menghapus superadmin.');
-                    return;
-                }
-                 showModal(`Apakah Anda yakin ingin menghapus admin: ${adminUsername}?`, () => {
-                    const updatedUsers = db.users.filter(user => user.id !== adminId);
-                    updateDb('users', updatedUsers);
-                });
-            };
-
-            return (
-                <div>
-                    <h3 className="font-bold text-lg mb-4 text-white">Manajemen User Siswa</h3>
-                    <div className="flex flex-wrap gap-4 items-center mb-4 p-4 bg-gray-700/50 rounded-lg">
-                        <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} className="p-2 border border-gray-600 bg-gray-700 text-white rounded-md">
-                            <option value="Semua Kelas">Semua Kelas</option>
-                            {CLASS_LIST.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                        <input type="text" placeholder="Cari username..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="p-2 border border-gray-600 bg-gray-700 text-white rounded-md flex-grow"/>
-                        <button onClick={handleDeleteByClass} className="bg-red-600 text-white px-4 py-2 rounded-md text-sm hover:bg-red-700 disabled:bg-red-800" disabled={selectedClass === 'Semua Kelas'}>
-                            Hapus Semua User di Kelas {selectedClass !== 'Semua Kelas' ? selectedClass : ''}
-                        </button>
-                    </div>
-
-                    <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-2">
-                        {filteredUsers.length > 0 ? filteredUsers.map(user => (
-                            <div key={user.id} className="flex justify-between items-center p-3 bg-gray-700 rounded-md shadow-sm">
-                                <span className="text-white">{user.username} ({user.className})</span>
-                                <button onClick={() => handleDeleteOne(user.id, user.username)} className="bg-red-500 text-white px-3 py-1 rounded-md text-sm hover:bg-red-600">Hapus</button>
-                            </div>
-                        )) : <p className="text-gray-400">Tidak ada user yang cocok.</p>}
-                    </div>
-
-                    {isSuperAdmin && (
-                        <div className="mt-8">
-                            <h3 className="font-bold text-lg mb-4 border-t border-purple-400/30 pt-4 text-white">Manajemen Admin (Superadmin Only)</h3>
-                            <div className="space-y-3">
-                                {admins.map(admin => (
-                                    <div key={admin.id} className="flex justify-between items-center p-3 bg-gray-700 rounded-md shadow-sm">
-                                        <span className="text-white">{admin.username} {admin.username === 'superadmin' && '(Superadmin)'}</span>
-                                        {admin.username !== 'superadmin' && (
-                                           <button onClick={() => handleDeleteAdmin(admin.id, admin.username)} className="bg-red-500 text-white px-3 py-1 rounded-md text-sm hover:bg-red-600">Hapus</button>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
-        }
-
-        function ScheduleManager({ db, updateDb, CLASS_LIST, DAYS, showModal }) {
-            const [selectedClass, setSelectedClass] = useState(CLASS_LIST[0]);
-            const [editingEntry, setEditingEntry] = useState(null); // { day, index, data }
-        
-            const classSchedule = useMemo(() => db.schedules[selectedClass] || {}, [db.schedules, selectedClass]);
-        
-            const handleAddEntry = (day) => {
-                setEditingEntry({ day, data: { start: '07:00', end: '08:00', subject: '' } });
-            };
-        
-            const handleEditEntry = (day, index) => {
-                const entryData = classSchedule[day][index];
-                setEditingEntry({ day, index, data: { ...entryData } });
-            };
-        
-            const handleDeleteEntry = (day, index) => {
-                showModal('Apakah Anda yakin ingin menghapus jadwal ini?', () => {
-                    const newSchedules = JSON.parse(JSON.stringify(db.schedules));
-                    newSchedules[selectedClass][day].splice(index, 1);
-                    updateDb('schedules', newSchedules);
-                });
-            };
-        
-            const handleSaveEntry = () => {
-                if (!editingEntry.data.subject) {
-                    showModal('Nama mata pelajaran tidak boleh kosong.');
-                    return;
-                }
-        
-                const newSchedules = JSON.parse(JSON.stringify(db.schedules));
-                if (!newSchedules[selectedClass]) newSchedules[selectedClass] = {};
-                if (!newSchedules[selectedClass][editingEntry.day]) newSchedules[selectedClass][editingEntry.day] = [];
-        
-                if (editingEntry.index !== undefined) { // Editing existing
-                    newSchedules[selectedClass][editingEntry.day][editingEntry.index] = editingEntry.data;
-                } else { // Adding new
-                    newSchedules[selectedClass][editingEntry.day].push(editingEntry.data);
-                }
-        
-                // Sort entries by start time
-                newSchedules[selectedClass][editingEntry.day].sort((a, b) => a.start.localeCompare(b.start));
-        
-                updateDb('schedules', newSchedules);
-                setEditingEntry(null);
-            };
-        
-            return (
-                <div>
-                    <div className="flex flex-wrap gap-4 items-center mb-4 p-4 bg-gray-700/50 rounded-lg">
-                        <label htmlFor="class-select" className="font-medium text-white">Pilih Kelas:</label>
-                        <select id="class-select" value={selectedClass} onChange={e => setSelectedClass(e.target.value)} className="p-2 border border-gray-600 bg-gray-700 text-white rounded-md">
-                            {CLASS_LIST.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                    </div>
-        
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {DAYS.map(day => (
-                            <div key={day} className="bg-gray-700/80 p-4 rounded-lg shadow">
-                                <h4 className="font-bold text-lg mb-3 text-purple-300">{day}</h4>
-                                <div className="space-y-2">
-                                    {(classSchedule[day] || []).map((entry, index) => (
-                                        <div key={index} className="p-2 bg-gray-600 rounded-md flex justify-between items-center">
-                                            <div>
-                                                <p className="font-semibold text-white">{entry.subject}</p>
-                                                <p className="text-sm text-gray-400">{entry.start} - {entry.end}</p>
-                                            </div>
-                                            <div className="flex space-x-2">
-                                                <button onClick={() => handleEditEntry(day, index)} className="text-blue-400 hover:text-blue-300">Edit</button>
-                                                <button onClick={() => handleDeleteEntry(day, index)} className="text-red-400 hover:text-red-300">Hapus</button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                <button onClick={() => handleAddEntry(day)} className="mt-3 w-full bg-purple-600 text-white py-1 rounded-md hover:bg-purple-700">+ Tambah Jadwal</button>
-                            </div>
-                        ))}
-                    </div>
-        
-                    {editingEntry && (
-                        <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-40 p-4">
-                            <div className="bg-gray-800 border border-purple-400/50 rounded-lg shadow-xl p-6 w-full max-w-md">
-                                <h3 className="text-xl font-bold mb-4 text-white">
-                                    {editingEntry.index !== undefined ? 'Edit Jadwal' : 'Tambah Jadwal'} - {editingEntry.day}
-                                </h3>
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-300">Mata Pelajaran</label>
-                                        <input type="text" value={editingEntry.data.subject} onChange={e => setEditingEntry(prev => ({ ...prev, data: { ...prev.data, subject: e.target.value } }))} className="mt-1 block w-full px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500"/>
-                                    </div>
-                                    <div className="flex space-x-4">
-                                        <div className="flex-1">
-                                            <label className="block text-sm font-medium text-gray-300">Waktu Mulai</label>
-                                            <input type="time" value={editingEntry.data.start} onChange={e => setEditingEntry(prev => ({ ...prev, data: { ...prev.data, start: e.target.value } }))} className="mt-1 block w-full px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-md shadow-sm"/>
-                                        </div>
-                                        <div className="flex-1">
-                                            <label className="block text-sm font-medium text-gray-300">Waktu Selesai</label>
-                                            <input type="time" value={editingEntry.data.end} onChange={e => setEditingEntry(prev => ({ ...prev, data: { ...prev.data, end: e.target.value } }))} className="mt-1 block w-full px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-md shadow-sm"/>
-                                        </div>
-                                    </div>
-                                    <div className="flex justify-end space-x-3 pt-4">
-                                        <button onClick={() => setEditingEntry(null)} className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-500">Batal</button>
-                                        <button onClick={handleSaveEntry} className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700">Simpan</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
-        }
-        
-        function AssignmentManager({ db, updateDb, CLASS_LIST, showModal }) {
-            const [title, setTitle] = useState('');
-            const [content, setContent] = useState('');
-            const [selectedClass, setSelectedClass] = useState(CLASS_LIST[0]);
-            
-            const handleAddAssignment = (e) => {
-                e.preventDefault();
-                if (!title || !content) {
-                    showModal('Judul dan isi tugas tidak boleh kosong.');
-                    return;
-                }
-        
-                const newAssignment = {
-                    id: Date.now(),
-                    title,
-                    content,
-                    className: selectedClass,
-                    createdAt: new Date().toISOString(),
-                };
-        
-                const updatedAssignments = [...db.assignments, newAssignment];
-                updateDb('assignments', updatedAssignments);
-                
-                const usersInClass = db.users.filter(u => u.className === selectedClass);
-                const newNotifications = usersInClass.map(user => ({
-                    id: Date.now() + Math.random(),
-                    userId: user.id,
-                    message: `Tugas baru untuk kelas ${selectedClass}: ${title}`,
-                    read: false,
-                    createdAt: new Date().toISOString()
-                }));
-                updateDb('notifications', [...db.notifications, ...newNotifications]);
-        
-                showModal('Tugas berhasil ditambahkan.');
-                setTitle('');
-                setContent('');
-            };
-        
-            const handleDeleteAssignment = (id) => {
-                showModal('Apakah Anda yakin ingin menghapus tugas ini?', () => {
-                    const updatedAssignments = db.assignments.filter(a => a.id !== id);
-                    updateDb('assignments', updatedAssignments);
-                });
-            };
-        
-            return (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div>
-                        <h3 className="font-bold text-lg mb-4 text-white">Tambah Tugas Baru</h3>
-                        <form onSubmit={handleAddAssignment} className="p-4 bg-gray-700/80 rounded-lg shadow space-y-4">
-                             <div>
-                                <label className="block text-sm font-medium text-gray-300">Judul Tugas</label>
-                                <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="mt-1 block w-full p-2 border border-gray-600 bg-gray-700 text-white rounded-md"/>
-                             </div>
-                             <div>
-                                <label className="block text-sm font-medium text-gray-300">Isi/Deskripsi Tugas</label>
-                                <textarea value={content} onChange={e => setContent(e.target.value)} rows="4" className="mt-1 block w-full p-2 border border-gray-600 bg-gray-700 text-white rounded-md"></textarea>
-                             </div>
-                              <div>
-                                <label className="block text-sm font-medium text-gray-300">Untuk Kelas</label>
-                                <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} className="mt-1 block w-full p-2 border border-gray-600 bg-gray-700 text-white rounded-md">
-                                    {CLASS_LIST.map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
-                             </div>
-                             <button type="submit" className="w-full bg-purple-600 text-white py-2 rounded-md hover:bg-purple-700">Tambah Tugas</button>
-                        </form>
-                    </div>
-                    <div>
-                        <h3 className="font-bold text-lg mb-4 text-white">Daftar Tugas</h3>
-                        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
-                             {db.assignments.length > 0 ? [...db.assignments].reverse().map(assignment => (
-                                <div key={assignment.id} className="p-3 bg-gray-700 rounded-lg shadow">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <p className="font-bold text-white">{assignment.title} <span className="text-sm font-normal text-gray-400">- {assignment.className}</span></p>
-                                            <p className="text-sm text-gray-300 mt-1">{assignment.content}</p>
-                                            <p className="text-xs text-gray-500 mt-2">Dibuat: {new Date(assignment.createdAt).toLocaleString('id-ID')}</p>
-                                        </div>
-                                        <button onClick={() => handleDeleteAssignment(assignment.id)} className="text-red-400 hover:text-red-300 text-sm">Hapus</button>
-                                    </div>
-                                </div>
-                            )) : <p className="text-gray-400">Belum ada tugas.</p>}
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-        
-        function UserNotesViewer({ notes, users }) {
-             const notesWithUsernames = useMemo(() => {
-                return notes.map(note => {
-                    const user = users.find(u => u.id === note.userId);
-                    return { ...note, username: user ? user.username : 'User tidak diketahui', className: user ? user.className : '-' };
-                }).reverse();
-            }, [notes, users]);
-        
-            return (
-                 <div>
-                    <h3 className="font-bold text-lg mb-4 text-white">Semua Catatan User</h3>
-                     <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-2">
-                        {notesWithUsernames.length > 0 ? notesWithUsernames.map(note => (
-                            <div key={note.id} className="p-3 bg-gray-700 rounded-lg shadow">
-                                <p className="font-semibold text-white">{note.content}</p>
-                                <p className="text-sm text-gray-400 mt-2">
-                                    <span className="font-medium text-purple-300">{note.username} ({note.className})</span> - untuk hari <span className="font-medium">{note.date}</span>
-                                </p>
-                            </div>
-                        )) : <p className="text-gray-400">Tidak ada catatan dari user.</p>}
-                    </div>
-                </div>
-            );
-        }
-
-        // --- USER DASHBOARD ---
-        function UserDashboard({ currentUser, db, updateDb, DAYS, onLogout, showModal }) {
-            const today = useMemo(() => new Date().toLocaleDateString('id-ID', { weekday: 'long' }), []);
-            const [activeDay, setActiveDay] = useState(DAYS.includes(today) ? today : DAYS[0]);
-            const [note, setNote] = useState('');
-            const [showNotifications, setShowNotifications] = useState(false);
-
-            const userSchedule = useMemo(() => db.schedules[currentUser.className] || {}, [db.schedules, currentUser.className]);
-            const userAssignments = useMemo(() => [...db.assignments].filter(a => a.className === currentUser.className).reverse(), [db.assignments, currentUser.className]);
-            const userNotes = useMemo(() => db.notes.filter(n => n.userId === currentUser.id), [db.notes, currentUser.id]);
-            const userNotifications = useMemo(() => db.notifications.filter(n => n.userId === currentUser.id).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)), [db.notifications, currentUser.id]);
-            const unreadCount = useMemo(() => userNotifications.filter(n => !n.read).length, [userNotifications]);
-
-            useEffect(() => {
-                const currentNote = userNotes.find(n => n.date === activeDay);
-                setNote(currentNote ? currentNote.content : '');
-            }, [activeDay, userNotes]);
-
-            const handleSaveNote = () => {
-                const existingNoteIndex = db.notes.findIndex(n => n.userId === currentUser.id && n.date === activeDay);
-                let updatedNotes = [...db.notes];
-                if (existingNoteIndex > -1) {
-                    if (note.trim() === '') {
-                        updatedNotes.splice(existingNoteIndex, 1);
-                    } else {
-                        updatedNotes[existingNoteIndex].content = note;
-                    }
-                } else if (note.trim() !== '') {
-                    updatedNotes.push({
-                        id: Date.now(),
-                        userId: currentUser.id,
-                        date: activeDay,
-                        content: note,
-                    });
-                }
-                updateDb('notes', updatedNotes);
-                showModal(`Catatan untuk hari ${activeDay} berhasil disimpan.`);
-            };
-            
-            const handleMarkNotificationsRead = () => {
-                const updatedNotifications = db.notifications.map(n => 
-                    n.userId === currentUser.id ? { ...n, read: true } : n
-                );
-                updateDb('notifications', updatedNotifications);
-            };
-
-            const handleDeleteOneNotification = (notificationId) => {
-                const updatedNotifications = db.notifications.filter(n => n.id !== notificationId);
-                updateDb('notifications', updatedNotifications);
-            };
-
-            const handleDeleteAllNotifications = () => {
-                showModal('Apakah Anda yakin ingin menghapus semua notifikasi Anda?', () => {
-                    const updatedNotifications = db.notifications.filter(n => n.userId !== currentUser.id);
-                    updateDb('notifications', updatedNotifications);
-                    setShowNotifications(false); // Close modal after deletion
-                });
-            };
-
-            return (
-                <div className="bg-gray-800/80 backdrop-blur-md rounded-2xl shadow-xl p-6 min-h-[calc(100vh-4rem)] border border-purple-400/30">
-                    <header className="flex justify-between items-center mb-6 pb-4 border-b border-purple-400/30">
-                        <div className="flex items-center space-x-3">
-                             <StarLogo />
-                            <div>
-                                <h1 className="text-2xl font-bold text-white">Dasbor Siswa - Kelas {currentUser.className}</h1>
-                                <p className="text-sm text-gray-400">Selamat datang, {currentUser.username}</p>
-                            </div>
-                        </div>
-                        <div className="flex items-center space-x-6">
-                            <NotificationIcon count={unreadCount} onClick={() => setShowNotifications(true)} />
-                            <button onClick={onLogout} className="px-4 py-2 text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 transition">Logout</button>
-                        </div>
-                    </header>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        {/* Schedule Section */}
-                        <div className="lg:col-span-2">
-                             <h2 className="text-xl font-bold mb-4 text-white">Jadwal Pelajaran</h2>
-                             <div className="flex flex-wrap border-b border-purple-400/30 mb-4">
-                                {DAYS.map(day => (
-                                    <button key={day} onClick={() => setActiveDay(day)} className={`px-4 py-2 font-medium transition-colors ${activeDay === day ? 'text-purple-300 border-b-2 border-purple-300' : 'text-gray-400'}`}>
-                                        {day}
-                                    </button>
-                                ))}
-                            </div>
-                            <div className="space-y-3">
-                                {(userSchedule[activeDay] || []).length > 0 ? (
-                                    userSchedule[activeDay].map((entry, index) => (
-                                         <div key={index} className="p-3 bg-gray-700/80 rounded-lg flex items-center space-x-4">
-                                            <div className="text-center w-20">
-                                                <p className="font-bold text-purple-300">{entry.start}</p>
-                                                <p className="text-xs text-gray-400">hingga</p>
-                                                <p className="font-semibold text-purple-200">{entry.end}</p>
-                                            </div>
-                                            <div className="border-l-2 border-purple-400/50 pl-4">
-                                                <p className="font-bold text-lg text-white">{entry.subject}</p>
-                                            </div>
-                                         </div>
-                                    ))
-                                ) : (
-                                    <p className="text-gray-400 p-3 bg-gray-700/50 rounded-lg">Tidak ada jadwal untuk hari ini.</p>
-                                )}
-                            </div>
-                            {/* Notes Section */}
-                            <div className="mt-6">
-                                <h3 className="font-semibold text-lg mb-2 text-white">Catatan Pribadi untuk hari {activeDay}</h3>
-                                <textarea value={note} onChange={e => setNote(e.target.value)} rows="3" className="w-full p-2 border border-gray-600 bg-gray-700 text-white rounded-md" placeholder="Tulis catatan di sini..."></textarea>
-                                <button onClick={handleSaveNote} className="mt-2 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700">Simpan Catatan</button>
-                            </div>
-                        </div>
-
-                        {/* Assignments Section */}
-                        <div>
-                             <h2 className="text-xl font-bold mb-4 text-white">Tugas</h2>
-                             <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-2">
-                                {userAssignments.length > 0 ? userAssignments.map(assignment => (
-                                    <div key={assignment.id} className="p-3 bg-gray-700/80 rounded-lg shadow">
-                                        <p className="font-bold text-white">{assignment.title}</p>
-                                        <p className="text-sm text-gray-300 mt-1">{assignment.content}</p>
-                                        <p className="text-xs text-gray-500 mt-2">Dibuat: {new Date(assignment.createdAt).toLocaleString('id-ID')}</p>
-                                    </div>
-                                )) : <p className="text-gray-400">Tidak ada tugas.</p>}
-                             </div>
-                        </div>
-                    </div>
-
-                    {/* Notifications Modal */}
-                    {showNotifications && (
-                        <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 p-4">
-                            <div className="bg-gray-800 border border-purple-400/50 rounded-lg shadow-xl p-6 w-full max-w-md">
-                                <div className="flex justify-between items-center mb-4">
-                                     <h3 className="text-xl font-bold text-white">Notifikasi</h3>
-                                     <button onClick={() => setShowNotifications(false)} className="text-gray-400 hover:text-white text-2xl font-bold">&times;</button>
-                                </div>
-                                <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2 mb-4">
-                                    {userNotifications.length > 0 ? userNotifications.map(n => (
-                                        <div key={n.id} className={`p-3 rounded-md flex justify-between items-center ${n.read ? 'bg-gray-700' : 'bg-blue-900/50'}`}>
-                                            <div>
-                                                <p className={`text-sm ${n.read ? 'text-gray-300' : 'text-blue-200 font-semibold'}`}>{n.message}</p>
-                                                <p className="text-xs text-gray-500 mt-1">{new Date(n.createdAt).toLocaleString('id-ID')}</p>
-                                            </div>
-                                            <button onClick={() => handleDeleteOneNotification(n.id)} className="text-red-400 hover:text-red-600 text-xl font-bold ml-3 px-2 rounded-full">&times;</button>
-                                        </div>
-                                    )) : <p className="text-gray-400 text-center py-4">Tidak ada notifikasi.</p>}
-                                </div>
-                                {userNotifications.length > 0 && (
-                                    <div className="pt-4 border-t border-purple-400/30">
-                                        {unreadCount > 0 && (
-                                            <button onClick={handleMarkNotificationsRead} className="w-full py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 mb-2">Tandai semua sudah dibaca</button>
-                                        )}
-                                        <button onClick={handleDeleteAllNotifications} className="w-full py-2 bg-red-600 text-white rounded-md hover:bg-red-700">Hapus Semua Notifikasi</button>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
-        }
-
-        // --- RENDER THE APP ---
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-
-    </script>
+    <div id="root"></div>
+
+    <!-- React Libraries -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+
+    <!-- Babel to transpile JSX in the browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- SheetJS/xlsx for reading Excel files -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback, useMemo, useRef } = React;
+
+        // --- GEMINI API CALL UTILITY ---
+        const callGeminiApi = async (prompt, systemInstruction) => {
+            const apiKey = ""; // API key is handled by the environment
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+            };
+
+            if (systemInstruction) {
+                payload.systemInstruction = {
+                    parts: [{ text: systemInstruction }]
+                };
+            }
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+
+                if (!response.ok) {
+                    const errorBody = await response.json();
+                    throw new Error(`API Error: ${response.status} ${response.statusText} - ${errorBody.error.message}`);
+                }
+
+                const result = await response.json();
+                const candidate = result.candidates?.[0];
+
+                if (candidate && candidate.content?.parts?.[0]?.text) {
+                    return candidate.content.parts[0].text;
+                } else {
+                    return "Tidak ada respons yang valid dari AI.";
+                }
+            } catch (error) {
+                console.error("Error calling Gemini API:", error);
+                return `Terjadi kesalahan saat menghubungi AI: ${error.message}`;
+            }
+        };
+
+
+        // --- SVG ICON COMPONENTS ---
+        const StarLogo = () => (
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style={{stopColor: '#FFD700', stopOpacity: 1}} />
+                <stop offset="100%" style={{stopColor: '#FFA500', stopOpacity: 1}} />
+              </linearGradient>
+            </defs>
+            <path d="M12 2L14.09 8.26L20 9.27L15.55 13.97L16.91 20L12 16.54L7.09 20L8.45 13.97L4 9.27L9.91 8.26L12 2Z" fill="url(#goldGradient)" stroke="#FFC700" strokeWidth="0.5"/>
+          </svg>
+        );
+
+        const GeminiIcon = () => (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M5.99844 10.5C5.99844 6.358 9.35644 3 13.4984 3C16.5394 3 19.1974 4.851 20.2434 7.5H13.4984V10.5H21.4984C21.4984 10.83 21.4984 11.16 21.4984 11.49C21.4984 17.147 16.6454 21 10.9984 21C7.81844 21 4.98544 19.23 3.49844 16.5L5.99844 14.5C6.98544 16.14 8.84744 17.5 10.9984 17.5C14.2824 17.5 16.9984 14.811 16.9984 11.49H10.9984C7.81844 11.49 5.99844 10.5 5.99844 10.5Z" fill="url(#geminiGradient)"/>
+                <defs>
+                    <linearGradient id="geminiGradient" x1="3.49844" y1="3" x2="21.4984" y2="21" gradientUnits="userSpaceOnUse">
+                        <stop stopColor="#8E44AD"/>
+                        <stop offset="0.5" stopColor="#3498DB"/>
+                        <stop offset="1" stopColor="#2ECC71"/>
+                    </linearGradient>
+                </defs>
+            </svg>
+        );
+
+        const NotificationIcon = ({ count, onClick }) => (
+            <div className="relative cursor-pointer" onClick={onClick}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-300">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+                {count > 0 && (
+                    <span className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white ring-2 ring-gray-800">
+                        {count > 99 ? '99+' : count}
+                    </span>
+                )}
+            </div>
+        );
+
+        // --- UTILITY HOOKS & COMPONENTS ---
+        const useModal = () => {
+            const [modalState, setModalState] = useState({ isOpen: false, message: '', onConfirm: null, type: 'alert' });
+
+            const showModal = (message, onConfirmCallback = null) => {
+                setModalState({
+                    isOpen: true,
+                    message,
+                    onConfirm: onConfirmCallback,
+                    type: onConfirmCallback ? 'confirm' : 'alert',
+                });
+            };
+
+            const hideModal = () => {
+                setModalState({ isOpen: false, message: '', onConfirm: null, type: 'alert' });
+            };
+
+            const handleConfirm = () => {
+                if (modalState.onConfirm) {
+                    modalState.onConfirm();
+                }
+                hideModal();
+            };
+
+            const ModalComponent = () => {
+                if (!modalState.isOpen) return null;
+                return (
+                    <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 p-4">
+                        <div className="bg-gray-800 border border-purple-400 rounded-lg shadow-xl p-6 w-full max-w-sm text-center">
+                            <p className="mb-6 text-gray-200">{modalState.message}</p>
+                            <div className="flex justify-center space-x-4">
+                                {modalState.type === 'confirm' && (
+                                    <button onClick={hideModal} className="px-4 py-2 rounded-md bg-gray-600 text-gray-100 hover:bg-gray-500">
+                                        Batal
+                                    </button>
+                                )}
+                                <button onClick={handleConfirm} className="px-4 py-2 rounded-md bg-purple-600 text-white hover:bg-purple-700">
+                                    {modalState.type === 'confirm' ? 'Ya, Lanjutkan' : 'OK'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            return { ModalComponent, showModal };
+        };
+
+        // --- INITIAL DATABASE SETUP ---
+        const useDatabase = () => {
+            const initializeData = () => {
+                console.log("Initializing database for the first time...");
+                const initialUsers = [
+                    { id: 1, username: 'superadmin', password: 'superadmin', role: 'admin', approved: true },
+                    { id: 2, username: 'admin', password: 'admin', role: 'admin', approved: true },
+                    { id: 3, username: 'XI-A_user', password: 'password', role: 'user', className: 'XI-A', approved: true },
+                ];
+                const initialSchedules = {
+                    'XI-A': {
+                        Senin: [{ start: '07:00', end: '08:30', subject: 'Matematika' }, { start: '08:30', end: '10:00', subject: 'Fisika' }],
+                        Selasa: [{ start: '07:00', end: '08:30', subject: 'Kimia' }],
+                    }
+                };
+                const initialAssignments = [
+                    { id: 1, title: 'Tugas Kalkulus', content: 'Kerjakan LKS hal 50.', className: 'XI-A', createdAt: new Date().toISOString() }
+                ];
+                const initialNotes = [
+                    { id: 1, userId: 3, date: 'Senin', content: 'Jangan lupa bawa kalkulator.' }
+                ];
+                const initialNotifications = [
+                     { id: 1, userId: 3, message: 'Tugas baru ditambahkan: Tugas Kalkulus', read: false, createdAt: new Date().toISOString() }
+                ];
+
+                localStorage.setItem('users', JSON.stringify(initialUsers));
+                localStorage.setItem('schedules', JSON.stringify(initialSchedules));
+                localStorage.setItem('assignments', JSON.stringify(initialAssignments));
+                localStorage.setItem('notes', JSON.stringify(initialNotes));
+                localStorage.setItem('pendingUsers', JSON.stringify([]));
+                localStorage.setItem('notifications', JSON.stringify(initialNotifications));
+                
+                return { 
+                    users: initialUsers, 
+                    schedules: initialSchedules, 
+                    assignments: initialAssignments, 
+                    notes: initialNotes, 
+                    pendingUsers: [],
+                    notifications: initialNotifications 
+                };
+            };
+
+            const loadData = (key, defaultValue = []) => {
+                try {
+                    const data = localStorage.getItem(key);
+                    return data ? JSON.parse(data) : defaultValue;
+                } catch (error) {
+                    console.error(`Error loading ${key} from localStorage`, error);
+                    return defaultValue;
+                }
+            };
+            
+            const [db, setDb] = useState(() => {
+                const isInitialized = localStorage.getItem('users');
+                if (!isInitialized) {
+                    return initializeData();
+                }
+                return {
+                    users: loadData('users'),
+                    schedules: loadData('schedules', {}),
+                    assignments: loadData('assignments'),
+                    notes: loadData('notes'),
+                    pendingUsers: loadData('pendingUsers'),
+                    notifications: loadData('notifications', []),
+                };
+            });
+
+            const updateDb = (key, data) => {
+                localStorage.setItem(key, JSON.stringify(data));
+                setDb(prevDb => ({ ...prevDb, [key]: data }));
+            };
+
+            return { db, updateDb };
+        };
+
+
+        // --- MAIN APP COMPONENT ---
+        function App() {
+            const { db, updateDb } = useDatabase();
+            const [currentUser, setCurrentUser] = useState(null);
+            const [page, setPage] = useState('login');
+            const [backgroundPos, setBackgroundPos] = useState(0);
+            const { ModalComponent, showModal } = useModal();
+
+            const CLASS_LIST = useMemo(() => {
+                const grades = ['X', 'XI', 'XII'];
+                const majors = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+                return grades.flatMap(grade => majors.map(major => `${grade}-${major}`));
+            }, []);
+
+            const DAYS = useMemo(() => ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'], []);
+
+            useEffect(() => {
+                const sessionUser = sessionStorage.getItem('currentUser');
+                if (sessionUser) {
+                    const user = JSON.parse(sessionUser);
+                    setCurrentUser(user);
+                    setPage(user.role);
+                }
+            }, []);
+
+            const navigate = (newPage) => {
+                setPage(newPage);
+                if (newPage !== 'login' && page === 'login') {
+                    setBackgroundPos(prev => prev - 150);
+                }
+            };
+
+            const handleLogin = ({ username, password }) => {
+                const user = db.users.find(u => u.username === username && u.password === password);
+                if (user && user.approved) {
+                    setCurrentUser(user);
+                    sessionStorage.setItem('currentUser', JSON.stringify(user));
+                    navigate(user.role);
+                    return true;
+                }
+                showModal('Username atau password salah, atau akun belum disetujui.');
+                return false;
+            };
+            
+            const handleRegister = ({ username, password, className, role }) => {
+                if (db.users.some(u => u.username === username) || db.pendingUsers.some(u => u.username === username)) {
+                    showModal('Username sudah digunakan atau sedang dalam proses persetujuan.');
+                    return false;
+                }
+                
+                const newUser = {
+                    id: Date.now(),
+                    username,
+                    password,
+                    role,
+                    className: role === 'user' ? className : null,
+                    approved: false
+                };
+
+                updateDb('pendingUsers', [...db.pendingUsers, newUser]);
+                showModal('Registrasi berhasil! Akun Anda sedang menunggu persetujuan dari Admin.');
+                return true;
+            };
+
+            const handleLogout = () => {
+                setCurrentUser(null);
+                sessionStorage.removeItem('currentUser');
+                setBackgroundPos(0);
+                navigate('login');
+            };
+
+            const renderPage = () => {
+                switch (page) {
+                    case 'admin':
+                        return <AdminDashboard 
+                                currentUser={currentUser} 
+                                db={db} 
+                                updateDb={updateDb} 
+                                CLASS_LIST={CLASS_LIST} 
+                                DAYS={DAYS} 
+                                onLogout={handleLogout} 
+                                showModal={showModal}
+                                />;
+                    case 'user':
+                        return <UserDashboard 
+                                currentUser={currentUser} 
+                                db={db} 
+                                updateDb={updateDb} 
+                                DAYS={DAYS} 
+                                onLogout={handleLogout}
+                                showModal={showModal}
+                                />;
+                    default:
+                        return <LoginPage onLogin={handleLogin} onRegister={handleRegister} CLASS_LIST={CLASS_LIST} showModal={showModal} />;
+                }
+            };
+
+            return (
+                <div className="min-h-screen bg-gray-900 font-sans text-gray-200">
+                    <ModalComponent />
+                    <div 
+                        className="fixed inset-0 z-0 bg-cover bg-center transition-transform duration-1000 ease-in-out"
+                        style={{
+                            backgroundImage: "url('https://images.unsplash.com/photo-1506442682393-205b5546f345?q=80&w=2574&auto=format&fit=crop')",
+                            transform: `translateX(${backgroundPos}px)`
+                        }}
+                    ></div>
+                    <div className="fixed inset-0 bg-black/50 z-0"></div>
+
+                    <main className="relative z-10">
+                        <div key={page} className="page-slide-in p-4 sm:p-6 md:p-8">
+                           {renderPage()}
+                        </div>
+                    </main>
+                </div>
+            );
+        }
+        
+        // --- AUTHENTICATION PAGE ---
+        function LoginPage({ onLogin, onRegister, CLASS_LIST, showModal }) {
+            const [isRegister, setIsRegister] = useState(false);
+            const [form, setForm] = useState({ username: '', password: '', className: CLASS_LIST[0], role: 'user' });
+            const [confirmPassword, setConfirmPassword] = useState('');
+
+            const handleChange = (e) => {
+                const { name, value } = e.target;
+                setForm(prev => ({ ...prev, [name]: value }));
+            };
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (isRegister) {
+                    if (form.password !== confirmPassword) {
+                        showModal("Password tidak cocok!");
+                        return;
+                    }
+                    if(onRegister(form)) {
+                        setIsRegister(false);
+                        setForm({ username: '', password: '', className: CLASS_LIST[0], role: 'user' });
+                        setConfirmPassword('');
+                    }
+                } else {
+                    onLogin(form);
+                }
+            };
+
+            return (
+                <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)]">
+                    <div className="w-full max-w-md p-8 space-y-6 bg-gray-800/80 backdrop-blur-md rounded-2xl shadow-2xl border border-purple-400/30">
+                        <div className="flex justify-center">
+                            <StarLogo />
+                        </div>
+                        <h2 className="text-center text-3xl font-extrabold text-white">{isRegister ? 'Buat Akun Baru' : 'Selamat Datang'}</h2>
+                        
+                        <form className="space-y-6" onSubmit={handleSubmit}>
+                            <div className="space-y-4 rounded-md">
+                                <input name="username" type="text" required value={form.username} onChange={handleChange} className="w-full px-3 py-2 border border-gray-600 bg-gray-700 placeholder-gray-400 text-white rounded-md focus:outline-none focus:ring-purple-500 focus:border-purple-500" placeholder="Username" />
+                                <input name="password" type="password" required value={form.password} onChange={handleChange} className="w-full px-3 py-2 border border-gray-600 bg-gray-700 placeholder-gray-400 text-white rounded-md focus:outline-none focus:ring-purple-500 focus:border-purple-500" placeholder="Password" />
+                                {isRegister && (
+                                    <>
+                                        <input name="confirmPassword" type="password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full px-3 py-2 border border-gray-600 bg-gray-700 placeholder-gray-400 text-white rounded-md focus:outline-none focus:ring-purple-500 focus:border-purple-500" placeholder="Konfirmasi Password" />
+                                        <div className="flex items-center space-x-4 text-white">
+                                            <label><input type="radio" name="role" value="user" checked={form.role === 'user'} onChange={handleChange} className="text-purple-500 focus:ring-purple-600" /> User</label>
+                                            <label><input type="radio" name="role" value="admin" checked={form.role === 'admin'} onChange={handleChange} className="text-purple-500 focus:ring-purple-600"/> Admin</label>
+                                        </div>
+                                        {form.role === 'user' && (
+                                            <select name="className" value={form.className} onChange={handleChange} className="w-full px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-md focus:outline-none focus:ring-purple-500 focus:border-purple-500">
+                                                {CLASS_LIST.map(c => <option key={c} value={c}>{c}</option>)}
+                                            </select>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                            <button type="submit" className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 focus:ring-offset-gray-800 transition duration-150 ease-in-out">
+                                {isRegister ? 'Daftar' : 'Login'}
+                            </button>
+                        </form>
+
+                        <p className="text-center text-sm text-gray-300">
+                            {isRegister ? 'Sudah punya akun?' : 'Belum punya akun?'}
+                            <button onClick={() => setIsRegister(!isRegister)} className="ml-1 font-medium text-purple-400 hover:text-purple-300">
+                                {isRegister ? 'Login di sini' : 'Daftar sekarang'}
+                            </button>
+                        </p>
+                    </div>
+                </div>
+            );
+        }
+        
+        // --- ADMIN DASHBOARD AND COMPONENTS ---
+        function AdminDashboard({ currentUser, db, updateDb, CLASS_LIST, DAYS, onLogout, showModal }) {
+            const [activeTab, setActiveTab] = useState('approval');
+
+            const handleApproval = (userId, isApproved) => {
+                const userToProcess = db.pendingUsers.find(u => u.id === userId);
+                if (!userToProcess) return;
+
+                if (isApproved) {
+                    const approvedUser = { ...userToProcess, approved: true };
+                    updateDb('users', [...db.users, approvedUser]);
+                    showModal(`Registrasi ${userToProcess.username} disetujui.`);
+                } else {
+                    showModal(`Registrasi ${userToProcess.username} ditolak.`);
+                }
+                
+                updateDb('pendingUsers', db.pendingUsers.filter(u => u.id !== userId));
+            };
+            
+            return (
+                <div className="bg-gray-800/80 backdrop-blur-md rounded-2xl shadow-xl p-6 min-h-[calc(100vh-4rem)] border border-purple-400/30">
+                    <header className="flex justify-between items-center mb-6 pb-4 border-b border-purple-400/30">
+                        <div className="flex items-center space-x-3">
+                            <StarLogo />
+                            <div>
+                                <h1 className="text-2xl font-bold text-white">Dasbor Admin</h1>
+                                <p className="text-sm text-gray-400">Selamat datang, {currentUser.username}</p>
+                            </div>
+                        </div>
+                        <button onClick={onLogout} className="px-4 py-2 text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 transition">Logout</button>
+                    </header>
+                    
+                    <nav className="flex flex-wrap border-b border-purple-400/30 mb-6 -mx-1">
+                        <button onClick={() => setActiveTab('approval')} className={`px-4 py-2 rounded-t-lg mx-1 mb-[-1px] transition-colors ${activeTab === 'approval' ? 'bg-gray-700 text-purple-300 font-semibold border border-b-gray-700 border-purple-400/30' : 'text-gray-400 hover:bg-gray-700/50'}`}>Persetujuan ({db.pendingUsers.length})</button>
+                        <button onClick={() => setActiveTab('user_management')} className={`px-4 py-2 rounded-t-lg mx-1 mb-[-1px] transition-colors ${activeTab === 'user_management' ? 'bg-gray-700 text-purple-300 font-semibold border border-b-gray-700 border-purple-400/30' : 'text-gray-400 hover:bg-gray-700/50'}`}>Manajemen User</button>
+                        <button onClick={() => setActiveTab('schedule')} className={`px-4 py-2 rounded-t-lg mx-1 mb-[-1px] transition-colors ${activeTab === 'schedule' ? 'bg-gray-700 text-purple-300 font-semibold border border-b-gray-700 border-purple-400/30' : 'text-gray-400 hover:bg-gray-700/50'}`}>Manajemen Jadwal</button>
+                        <button onClick={() => setActiveTab('assignments')} className={`px-4 py-2 rounded-t-lg mx-1 mb-[-1px] transition-colors ${activeTab === 'assignments' ? 'bg-gray-700 text-purple-300 font-semibold border border-b-gray-700 border-purple-400/30' : 'text-gray-400 hover:bg-gray-700/50'}`}>Manajemen Tugas</button>
+                        <button onClick={() => setActiveTab('notes')} className={`px-4 py-2 rounded-t-lg mx-1 mb-[-1px] transition-colors ${activeTab === 'notes' ? 'bg-gray-700 text-purple-300 font-semibold border border-b-gray-700 border-purple-400/30' : 'text-gray-400 hover:bg-gray-700/50'}`}>Catatan User</button>
+                    </nav>
+
+                    <div className="transition-all duration-300">
+                        {activeTab === 'approval' && <RegistrationApproval currentUser={currentUser} pendingUsers={db.pendingUsers} onApprove={handleApproval} updateDb={updateDb} existingUsers={db.users} showModal={showModal}/>}
+                        {activeTab === 'user_management' && <UserManager currentUser={currentUser} db={db} updateDb={updateDb} CLASS_LIST={CLASS_LIST} showModal={showModal} />}
+                        {activeTab === 'schedule' && <ScheduleManager db={db} updateDb={updateDb} CLASS_LIST={CLASS_LIST} DAYS={DAYS} showModal={showModal} />}
+                        {activeTab === 'assignments' && <AssignmentManager db={db} updateDb={updateDb} CLASS_LIST={CLASS_LIST} showModal={showModal} />}
+                        {activeTab === 'notes' && <UserNotesViewer notes={db.notes} users={db.users} />}
+                    </div>
+                </div>
+            );
+        }
+        
+        function RegistrationApproval({ currentUser, pendingUsers, onApprove, updateDb, existingUsers, showModal }) {
+            const userFileInputRef = useRef(null);
+            const [userFileName, setUserFileName] = useState('');
+            const isSuperAdmin = currentUser.username === 'superadmin';
+            const adminFileInputRef = useRef(null);
+            const [adminFileName, setAdminFileName] = useState('');
+
+            const processUserData = (data) => {
+                const newPendingUsers = [];
+                const allUsernames = new Set([...existingUsers.map(u => u.username), ...pendingUsers.map(u => u.username)]);
+                
+                data.forEach(row => {
+                    const { username, password, className } = row;
+                    if (username && password && className && !allUsernames.has(username)) {
+                        newPendingUsers.push({
+                            id: Date.now() + Math.random(),
+                            username,
+                            password: String(password),
+                            className,
+                            role: 'user',
+                            approved: false
+                        });
+                        allUsernames.add(username);
+                    }
+                });
+
+                if (newPendingUsers.length > 0) {
+                    updateDb('pendingUsers', [...pendingUsers, ...newPendingUsers]);
+                    showModal(`${newPendingUsers.length} user baru dari file telah ditambahkan ke daftar persetujuan.`);
+                } else {
+                    showModal('Tidak ada user baru yang valid untuk ditambahkan. Pastikan file memiliki kolom header "username", "password", "className" dan tidak ada username yang duplikat.');
+                }
+            };
+
+            const handleUserFileChange = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                setUserFileName(file.name);
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+                        processUserData(jsonData);
+                    } catch (error) {
+                         showModal('Gagal memproses file: ' + error.message);
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+                if(userFileInputRef.current) userFileInputRef.current.value = '';
+                setUserFileName('');
+            };
+            
+            const processAdminData = (data) => {
+                const newPendingAdmins = [];
+                const allUsernames = new Set([...existingUsers.map(u => u.username), ...pendingUsers.map(u => u.username)]);
+                
+                data.forEach(row => {
+                    const { username, password } = row;
+                    if (username && password && !allUsernames.has(username)) {
+                        newPendingAdmins.push({
+                            id: Date.now() + Math.random(),
+                            username,
+                            password: String(password),
+                            className: null,
+                            role: 'admin',
+                            approved: false
+                        });
+                        allUsernames.add(username);
+                    }
+                });
+
+                if (newPendingAdmins.length > 0) {
+                    updateDb('pendingUsers', [...pendingUsers, ...newPendingAdmins]);
+                    showModal(`${newPendingAdmins.length} admin baru dari file telah ditambahkan ke daftar persetujuan.`);
+                } else {
+                    showModal('Tidak ada admin baru yang valid untuk ditambahkan. Pastikan file memiliki kolom header "username" dan "password", dan tidak ada username yang duplikat.');
+                }
+            };
+
+            const handleAdminFileChange = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                setAdminFileName(file.name);
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+                        processAdminData(jsonData);
+                    } catch (error) {
+                         showModal('Gagal memproses file: ' + error.message);
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+                if(adminFileInputRef.current) adminFileInputRef.current.value = '';
+                setAdminFileName('');
+            };
+
+            const usersToDisplay = isSuperAdmin ? pendingUsers : pendingUsers.filter(u => u.role === 'user');
+
+            return (
+                <div>
+                     <div className="p-4 bg-gray-700/50 rounded-lg border border-purple-400/30 mb-6">
+                         <h3 className="font-bold text-lg text-purple-300 mb-2">Impor User (Siswa) dari File</h3>
+                         <p className="text-sm text-gray-400 mb-4">
+                             Unggah file <strong>Excel (.xlsx, .xls)</strong>.
+                             Pastikan file memiliki kolom header: <strong>username, password, className</strong>.
+                         </p>
+                         <input type="file" accept=".xlsx,.xls" ref={userFileInputRef} onChange={handleUserFileChange} className="hidden" id="user-file-importer" />
+                         <label htmlFor="user-file-importer" className="file-input-button bg-purple-600 hover:bg-purple-700">Pilih File User</label>
+                         {userFileName && <span className="file-input-label">{userFileName}</span>}
+                     </div>
+
+                    {isSuperAdmin && (
+                         <div className="p-4 bg-gray-700/50 rounded-lg border border-blue-400/30 mb-6">
+                             <h3 className="font-bold text-lg text-blue-300 mb-2">Impor Admin dari File (Superadmin Only)</h3>
+                             <p className="text-sm text-gray-400 mb-4">
+                                 Unggah file <strong>Excel (.xlsx, .xls)</strong>.
+                                 Pastikan file memiliki kolom header: <strong>username, password</strong>.
+                             </p>
+                             <input type="file" accept=".xlsx,.xls" ref={adminFileInputRef} onChange={handleAdminFileChange} className="hidden" id="admin-file-importer" />
+                             <label htmlFor="admin-file-importer" className="file-input-button bg-blue-600 hover:bg-blue-700">Pilih File Admin</label>
+                             {adminFileName && <span className="file-input-label">{adminFileName}</span>}
+                         </div>
+                    )}
+
+                    <h3 className="font-bold text-lg mb-4 text-white">Daftar Registrasi Menunggu Persetujuan</h3>
+                    <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-2">
+                        {usersToDisplay.length > 0 ? usersToDisplay.map(user => (
+                            <div key={user.id} className="flex flex-wrap justify-between items-center p-3 bg-gray-700 rounded-md shadow-sm">
+                                <div>
+                                    <p>Username: <span className="font-semibold text-white">{user.username}</span></p>
+                                    <p className="text-sm text-gray-400">
+                                        Role: <span className="capitalize font-medium">{user.role}</span>
+                                        {user.role === 'user' && ` - Kelas: ${user.className}`}
+                                    </p>
+                                </div>
+                                <div className="flex space-x-2 mt-2 sm:mt-0">
+                                    <button onClick={() => onApprove(user.id, true)} className="bg-green-600 text-white px-4 py-2 rounded-md text-sm hover:bg-green-700">Setujui</button>
+                                    <button onClick={() => onApprove(user.id, false)} className="bg-red-600 text-white px-4 py-2 rounded-md text-sm hover:bg-red-700">Tolak</button>
+                                </div>
+                            </div>
+                        )) : <p className="text-gray-400">Tidak ada pendaftaran yang menunggu persetujuan.</p>}
+                    </div>
+                </div>
+            );
+        }
+
+        function UserManager({ currentUser, db, updateDb, CLASS_LIST, showModal }) {
+            const [selectedClass, setSelectedClass] = useState('Semua Kelas');
+            const [searchTerm, setSearchTerm] = useState('');
+            const isSuperAdmin = currentUser.username === 'superadmin';
+
+            const filteredUsers = useMemo(() => {
+                return db.users
+                    .filter(user => user.role === 'user')
+                    .filter(user => selectedClass === 'Semua Kelas' || user.className === selectedClass)
+                    .filter(user => user.username.toLowerCase().includes(searchTerm.toLowerCase()));
+            }, [db.users, selectedClass, searchTerm]);
+
+            const admins = useMemo(() => db.users.filter(user => user.role === 'admin'), [db.users]);
+
+            const handleDeleteOne = (userId, username) => {
+                showModal(`Apakah Anda yakin ingin menghapus user: ${username}?`, () => {
+                    const updatedUsers = db.users.filter(user => user.id !== userId);
+                    updateDb('users', updatedUsers);
+                });
+            };
+            
+            const handleDeleteByClass = () => {
+                if (selectedClass === 'Semua Kelas') {
+                    showModal('Silakan pilih kelas spesifik yang ingin dihapus.');
+                    return;
+                }
+                showModal(`PERINGATAN: Anda akan menghapus SEMUA user dari kelas ${selectedClass}. Aksi ini tidak dapat dibatalkan. Lanjutkan?`, () => {
+                    const updatedUsers = db.users.filter(user => user.role !== 'user' || user.className !== selectedClass);
+                    updateDb('users', updatedUsers);
+                });
+            };
+
+            const handleDeleteAdmin = (adminId, adminUsername) => {
+                if(adminUsername === 'superadmin') {
+                    showModal('Tidak dapat menghapus superadmin.');
+                    return;
+                }
+                 showModal(`Apakah Anda yakin ingin menghapus admin: ${adminUsername}?`, () => {
+                    const updatedUsers = db.users.filter(user => user.id !== adminId);
+                    updateDb('users', updatedUsers);
+                });
+            };
+
+            return (
+                <div>
+                    <h3 className="font-bold text-lg mb-4 text-white">Manajemen User Siswa</h3>
+                    <div className="flex flex-wrap gap-4 items-center mb-4 p-4 bg-gray-700/50 rounded-lg">
+                        <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} className="p-2 border border-gray-600 bg-gray-700 text-white rounded-md">
+                            <option value="Semua Kelas">Semua Kelas</option>
+                            {CLASS_LIST.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <input type="text" placeholder="Cari username..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="p-2 border border-gray-600 bg-gray-700 text-white rounded-md flex-grow"/>
+                        <button onClick={handleDeleteByClass} className="bg-red-600 text-white px-4 py-2 rounded-md text-sm hover:bg-red-700 disabled:bg-red-800" disabled={selectedClass === 'Semua Kelas'}>
+                            Hapus Semua User di Kelas {selectedClass !== 'Semua Kelas' ? selectedClass : ''}
+                        </button>
+                    </div>
+
+                    <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-2">
+                        {filteredUsers.length > 0 ? filteredUsers.map(user => (
+                            <div key={user.id} className="flex justify-between items-center p-3 bg-gray-700 rounded-md shadow-sm">
+                                <span className="text-white">{user.username} ({user.className})</span>
+                                <button onClick={() => handleDeleteOne(user.id, user.username)} className="bg-red-500 text-white px-4 py-2 rounded-md text-sm hover:bg-red-600">Hapus</button>
+                            </div>
+                        )) : <p className="text-gray-400">Tidak ada user yang cocok.</p>}
+                    </div>
+
+                    {isSuperAdmin && (
+                        <div className="mt-8">
+                            <h3 className="font-bold text-lg mb-4 border-t border-purple-400/30 pt-4 text-white">Manajemen Admin (Superadmin Only)</h3>
+                            <div className="space-y-3">
+                                {admins.map(admin => (
+                                    <div key={admin.id} className="flex justify-between items-center p-3 bg-gray-700 rounded-md shadow-sm">
+                                        <span className="text-white">{admin.username} {admin.username === 'superadmin' && '(Superadmin)'}</span>
+                                        {admin.username !== 'superadmin' && (
+                                           <button onClick={() => handleDeleteAdmin(admin.id, admin.username)} className="bg-red-500 text-white px-4 py-2 rounded-md text-sm hover:bg-red-600">Hapus</button>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function ScheduleManager({ db, updateDb, CLASS_LIST, DAYS, showModal }) {
+            const [selectedClass, setSelectedClass] = useState(CLASS_LIST[0]);
+            const [editingEntry, setEditingEntry] = useState(null); // { day, index, data }
+        
+            const classSchedule = useMemo(() => db.schedules[selectedClass] || {}, [db.schedules, selectedClass]);
+        
+            const handleAddEntry = (day) => {
+                setEditingEntry({ day, data: { start: '07:00', end: '08:00', subject: '' } });
+            };
+        
+            const handleEditEntry = (day, index) => {
+                const entryData = classSchedule[day][index];
+                setEditingEntry({ day, index, data: { ...entryData } });
+            };
+        
+            const handleDeleteEntry = (day, index) => {
+                showModal('Apakah Anda yakin ingin menghapus jadwal ini?', () => {
+                    const newSchedules = JSON.parse(JSON.stringify(db.schedules));
+                    newSchedules[selectedClass][day].splice(index, 1);
+                    updateDb('schedules', newSchedules);
+                });
+            };
+        
+            const handleSaveEntry = () => {
+                if (!editingEntry.data.subject) {
+                    showModal('Nama mata pelajaran tidak boleh kosong.');
+                    return;
+                }
+        
+                const newSchedules = JSON.parse(JSON.stringify(db.schedules));
+                if (!newSchedules[selectedClass]) newSchedules[selectedClass] = {};
+                if (!newSchedules[selectedClass][editingEntry.day]) newSchedules[selectedClass][editingEntry.day] = [];
+        
+                if (editingEntry.index !== undefined) { // Editing existing
+                    newSchedules[selectedClass][editingEntry.day][editingEntry.index] = editingEntry.data;
+                } else { // Adding new
+                    newSchedules[selectedClass][editingEntry.day].push(editingEntry.data);
+                }
+        
+                // Sort entries by start time
+                newSchedules[selectedClass][editingEntry.day].sort((a, b) => a.start.localeCompare(b.start));
+        
+                updateDb('schedules', newSchedules);
+                setEditingEntry(null);
+            };
+        
+            return (
+                <div>
+                    <div className="flex flex-wrap gap-4 items-center mb-4 p-4 bg-gray-700/50 rounded-lg">
+                        <label htmlFor="class-select" className="font-medium text-white">Pilih Kelas:</label>
+                        <select id="class-select" value={selectedClass} onChange={e => setSelectedClass(e.target.value)} className="p-2 border border-gray-600 bg-gray-700 text-white rounded-md">
+                            {CLASS_LIST.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                    </div>
+        
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {DAYS.map(day => (
+                            <div key={day} className="bg-gray-700/80 p-4 rounded-lg shadow">
+                                <h4 className="font-bold text-lg mb-3 text-purple-300">{day}</h4>
+                                <div className="space-y-2">
+                                    {(classSchedule[day] || []).map((entry, index) => (
+                                        <div key={index} className="p-2 bg-gray-600 rounded-md flex justify-between items-center">
+                                            <div>
+                                                <p className="font-semibold text-white">{entry.subject}</p>
+                                                <p className="text-sm text-gray-400">{entry.start} - {entry.end}</p>
+                                            </div>
+                                            <div className="flex space-x-2">
+                                                <button onClick={() => handleEditEntry(day, index)} className="text-blue-400 hover:text-blue-300 p-2 rounded-md hover:bg-gray-700">Edit</button>
+                                                <button onClick={() => handleDeleteEntry(day, index)} className="text-red-400 hover:text-red-300 p-2 rounded-md hover:bg-gray-700">Hapus</button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <button onClick={() => handleAddEntry(day)} className="mt-3 w-full bg-purple-600 text-white py-2 rounded-md hover:bg-purple-700">+ Tambah Jadwal</button>
+                            </div>
+                        ))}
+                    </div>
+        
+                    {editingEntry && (
+                        <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-40 p-4">
+                            <div className="bg-gray-800 border border-purple-400/50 rounded-lg shadow-xl p-6 w-full max-w-md">
+                                <h3 className="text-xl font-bold mb-4 text-white">
+                                    {editingEntry.index !== undefined ? 'Edit Jadwal' : 'Tambah Jadwal'} - {editingEntry.day}
+                                </h3>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-300">Mata Pelajaran</label>
+                                        <input type="text" value={editingEntry.data.subject} onChange={e => setEditingEntry(prev => ({ ...prev, data: { ...prev.data, subject: e.target.value } }))} className="mt-1 block w-full px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500"/>
+                                    </div>
+                                    <div className="flex space-x-4">
+                                        <div className="flex-1">
+                                            <label className="block text-sm font-medium text-gray-300">Waktu Mulai</label>
+                                            <input type="time" value={editingEntry.data.start} onChange={e => setEditingEntry(prev => ({ ...prev, data: { ...prev.data, start: e.target.value } }))} className="mt-1 block w-full px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-md shadow-sm"/>
+                                        </div>
+                                        <div className="flex-1">
+                                            <label className="block text-sm font-medium text-gray-300">Waktu Selesai</label>
+                                            <input type="time" value={editingEntry.data.end} onChange={e => setEditingEntry(prev => ({ ...prev, data: { ...prev.data, end: e.target.value } }))} className="mt-1 block w-full px-3 py-2 border border-gray-600 bg-gray-700 text-white rounded-md shadow-sm"/>
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-end space-x-3 pt-4">
+                                        <button onClick={() => setEditingEntry(null)} className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-500">Batal</button>
+                                        <button onClick={handleSaveEntry} className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700">Simpan</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+        
+        function AssignmentManager({ db, updateDb, CLASS_LIST, showModal }) {
+            const [title, setTitle] = useState('');
+            const [content, setContent] = useState('');
+            const [selectedClass, setSelectedClass] = useState(CLASS_LIST[0]);
+            const [isGenerating, setIsGenerating] = useState(false);
+
+            const handleGenerateContent = async () => {
+                if (!title) {
+                    showModal('Silakan isi judul tugas terlebih dahulu untuk menghasilkan deskripsi AI.');
+                    return;
+                }
+                setIsGenerating(true);
+                const systemInstruction = "Anda adalah asisten guru. Buat deskripsi tugas yang jelas, singkat, dan mudah dipahami untuk siswa berdasarkan judul yang diberikan.";
+                const prompt = `Buat deskripsi tugas untuk judul: "${title}"`;
+                const aiContent = await callGeminiApi(prompt, systemInstruction);
+                setContent(aiContent);
+                setIsGenerating(false);
+            };
+        
+            const handleAddAssignment = (e) => {
+                e.preventDefault();
+                if (!title || !content) {
+                    showModal('Judul dan isi tugas tidak boleh kosong.');
+                    return;
+                }
+        
+                const newAssignment = {
+                    id: Date.now(),
+                    title,
+                    content,
+                    className: selectedClass,
+                    createdAt: new Date().toISOString(),
+                };
+        
+                const updatedAssignments = [...db.assignments, newAssignment];
+                updateDb('assignments', updatedAssignments);
+                
+                const usersInClass = db.users.filter(u => u.className === selectedClass);
+                const newNotifications = usersInClass.map(user => ({
+                    id: Date.now() + Math.random(),
+                    userId: user.id,
+                    message: `Tugas baru untuk kelas ${selectedClass}: ${title}`,
+                    read: false,
+                    createdAt: new Date().toISOString()
+                }));
+                updateDb('notifications', [...db.notifications, ...newNotifications]);
+        
+                showModal('Tugas berhasil ditambahkan.');
+                setTitle('');
+                setContent('');
+            };
+        
+            const handleDeleteAssignment = (id) => {
+                showModal('Apakah Anda yakin ingin menghapus tugas ini?', () => {
+                    const updatedAssignments = db.assignments.filter(a => a.id !== id);
+                    updateDb('assignments', updatedAssignments);
+                });
+            };
+        
+            return (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <h3 className="font-bold text-lg mb-4 text-white">Tambah Tugas Baru</h3>
+                        <form onSubmit={handleAddAssignment} className="p-4 bg-gray-700/80 rounded-lg shadow space-y-4">
+                             <div>
+                                <label className="block text-sm font-medium text-gray-300">Judul Tugas</label>
+                                <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="mt-1 block w-full p-2 border border-gray-600 bg-gray-700 text-white rounded-md"/>
+                             </div>
+                             <div>
+                                <div className="flex justify-between items-center">
+                                    <label className="block text-sm font-medium text-gray-300">Isi/Deskripsi Tugas</label>
+                                    <button type="button" onClick={handleGenerateContent} disabled={isGenerating} className="flex items-center space-x-2 text-sm text-purple-300 hover:text-purple-200 disabled:opacity-50">
+                                        <GeminiIcon />
+                                        <span>{isGenerating ? 'Membuat...' : 'Buat dengan AI'}</span>
+                                    </button>
+                                </div>
+                                <textarea value={content} onChange={e => setContent(e.target.value)} rows="4" className="mt-1 block w-full p-2 border border-gray-600 bg-gray-700 text-white rounded-md"></textarea>
+                             </div>
+                             <div>
+                                <label className="block text-sm font-medium text-gray-300">Untuk Kelas</label>
+                                <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)} className="mt-1 block w-full p-2 border border-gray-600 bg-gray-700 text-white rounded-md">
+                                    {CLASS_LIST.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                             </div>
+                             <button type="submit" className="w-full bg-purple-600 text-white py-2 rounded-md hover:bg-purple-700">Tambah Tugas</button>
+                        </form>
+                    </div>
+                    <div>
+                        <h3 className="font-bold text-lg mb-4 text-white">Daftar Tugas</h3>
+                        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+                             {db.assignments.length > 0 ? [...db.assignments].reverse().map(assignment => (
+                                <div key={assignment.id} className="p-3 bg-gray-700 rounded-lg shadow">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <p className="font-bold text-white">{assignment.title} <span className="text-sm font-normal text-gray-400">- {assignment.className}</span></p>
+                                            <p className="text-sm text-gray-300 mt-1 whitespace-pre-wrap">{assignment.content}</p>
+                                            <p className="text-xs text-gray-500 mt-2">Dibuat: {new Date(assignment.createdAt).toLocaleString('id-ID')}</p>
+                                        </div>
+                                        <button onClick={() => handleDeleteAssignment(assignment.id)} className="text-red-400 hover:text-red-300 text-sm p-2 rounded-md hover:bg-gray-800">Hapus</button>
+                                    </div>
+                                </div>
+                            )) : <p className="text-gray-400">Belum ada tugas.</p>}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        
+        function UserNotesViewer({ notes, users }) {
+             const notesWithUsernames = useMemo(() => {
+                return notes.map(note => {
+                    const user = users.find(u => u.id === note.userId);
+                    return { ...note, username: user ? user.username : 'User tidak diketahui', className: user ? user.className : '-' };
+                }).reverse();
+            }, [notes, users]);
+        
+            return (
+                 <div>
+                    <h3 className="font-bold text-lg mb-4 text-white">Semua Catatan User</h3>
+                     <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-2">
+                        {notesWithUsernames.length > 0 ? notesWithUsernames.map(note => (
+                            <div key={note.id} className="p-3 bg-gray-700 rounded-lg shadow">
+                                <p className="font-semibold text-white whitespace-pre-wrap">{note.content}</p>
+                                <p className="text-sm text-gray-400 mt-2">
+                                    <span className="font-medium text-purple-300">{note.username} ({note.className})</span> - untuk hari <span className="font-medium">{note.date}</span>
+                                </p>
+                            </div>
+                        )) : <p className="text-gray-400">Tidak ada catatan dari user.</p>}
+                    </div>
+                </div>
+            );
+        }
+
+        // --- AI ASSISTANT COMPONENT FOR USER ---
+        function AIAssistant({ showModal }) {
+            const [prompt, setPrompt] = useState('');
+            const [response, setResponse] = useState('');
+            const [isLoading, setIsLoading] = useState(false);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (!prompt.trim()) {
+                    showModal("Silakan tulis pertanyaan Anda terlebih dahulu.");
+                    return;
+                }
+                setIsLoading(true);
+                setResponse('');
+                const systemInstruction = "Anda adalah asisten AI yang ramah dan membantu untuk siswa. Jelaskan konsep-konsep sulit dengan cara yang mudah dimengerti. Berikan jawaban yang relevan dengan sekolah dan pembelajaran.";
+                const aiResponse = await callGeminiApi(prompt, systemInstruction);
+                setResponse(aiResponse);
+                setIsLoading(false);
+            };
+
+            return (
+                <div>
+                    <h2 className="text-xl font-bold mb-4 text-white">Asisten Belajar AI</h2>
+                    <div className="bg-gray-700/50 p-4 rounded-lg">
+                        <form onSubmit={handleSubmit}>
+                            <textarea
+                                value={prompt}
+                                onChange={(e) => setPrompt(e.target.value)}
+                                rows="4"
+                                className="w-full p-2 border border-gray-600 bg-gray-700 text-white rounded-md"
+                                placeholder="Tanyakan apa saja tentang pelajaranmu..."
+                            ></textarea>
+                            <button type="submit" disabled={isLoading} className="mt-2 w-full flex justify-center items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:bg-purple-800">
+                                <GeminiIcon />
+                                <span>{isLoading ? 'Sedang berpikir...' : 'Tanya pada AI'}</span>
+                            </button>
+                        </form>
+
+                        { (isLoading || response) && (
+                            <div className="mt-4 p-4 bg-gray-800 rounded-lg border border-purple-400/30">
+                                <h3 className="font-semibold text-purple-300 mb-2">Jawaban AI:</h3>
+                                {isLoading ? (
+                                    <p className="text-gray-400 animate-pulse">AI sedang menyiapkan jawaban...</p>
+                                ) : (
+                                    <p className="text-gray-200 whitespace-pre-wrap">{response}</p>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )
+        }
+
+        // --- USER DASHBOARD ---
+        function UserDashboard({ currentUser, db, updateDb, DAYS, onLogout, showModal }) {
+            const today = useMemo(() => new Date().toLocaleDateString('id-ID', { weekday: 'long' }), []);
+            const [activeUserTab, setActiveUserTab] = useState('jadwal'); // jadwal, tugas, ai
+            const [activeDay, setActiveDay] = useState(DAYS.includes(today) ? today : DAYS[0]);
+            const [note, setNote] = useState('');
+            const [showNotifications, setShowNotifications] = useState(false);
+
+            const userSchedule = useMemo(() => db.schedules[currentUser.className] || {}, [db.schedules, currentUser.className]);
+            const userAssignments = useMemo(() => [...db.assignments].filter(a => a.className === currentUser.className).reverse(), [db.assignments, currentUser.className]);
+            const userNotes = useMemo(() => db.notes.filter(n => n.userId === currentUser.id), [db.notes, currentUser.id]);
+            const userNotifications = useMemo(() => db.notifications.filter(n => n.userId === currentUser.id).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)), [db.notifications, currentUser.id]);
+            const unreadCount = useMemo(() => userNotifications.filter(n => !n.read).length, [userNotifications]);
+
+            useEffect(() => {
+                if (activeUserTab === 'jadwal') {
+                    const currentNote = userNotes.find(n => n.date === activeDay);
+                    setNote(currentNote ? currentNote.content : '');
+                }
+            }, [activeDay, userNotes, activeUserTab]);
+
+            const handleSaveNote = () => {
+                const existingNoteIndex = db.notes.findIndex(n => n.userId === currentUser.id && n.date === activeDay);
+                let updatedNotes = [...db.notes];
+                if (existingNoteIndex > -1) {
+                    if (note.trim() === '') {
+                        updatedNotes.splice(existingNoteIndex, 1);
+                    } else {
+                        updatedNotes[existingNoteIndex].content = note;
+                    }
+                } else if (note.trim() !== '') {
+                    updatedNotes.push({
+                        id: Date.now(),
+                        userId: currentUser.id,
+                        date: activeDay,
+                        content: note,
+                    });
+                }
+                updateDb('notes', updatedNotes);
+                showModal(`Catatan untuk hari ${activeDay} berhasil disimpan.`);
+            };
+            
+            const handleMarkNotificationsRead = () => {
+                const updatedNotifications = db.notifications.map(n => 
+                    n.userId === currentUser.id ? { ...n, read: true } : n
+                );
+                updateDb('notifications', updatedNotifications);
+            };
+
+            const handleDeleteOneNotification = (notificationId) => {
+                const updatedNotifications = db.notifications.filter(n => n.id !== notificationId);
+                updateDb('notifications', updatedNotifications);
+            };
+
+            const handleDeleteAllNotifications = () => {
+                showModal('Apakah Anda yakin ingin menghapus semua notifikasi Anda?', () => {
+                    const updatedNotifications = db.notifications.filter(n => n.userId !== currentUser.id);
+                    updateDb('notifications', updatedNotifications);
+                    setShowNotifications(false); // Close modal after deletion
+                });
+            };
+
+            return (
+                <div className="bg-gray-800/80 backdrop-blur-md rounded-2xl shadow-xl p-6 min-h-[calc(100vh-4rem)] border border-purple-400/30">
+                    <header className="flex flex-wrap justify-between items-center mb-6 pb-4 border-b border-purple-400/30 gap-4">
+                        <div className="flex items-center space-x-3">
+                             <StarLogo />
+                            <div>
+                                <h1 className="text-xl md:text-2xl font-bold text-white">Dasbor - {currentUser.className}</h1>
+                                <p className="text-sm text-gray-400">Selamat datang, {currentUser.username}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center space-x-6">
+                            <NotificationIcon count={unreadCount} onClick={() => setShowNotifications(true)} />
+                            <button onClick={onLogout} className="px-4 py-2 text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 transition">Logout</button>
+                        </div>
+                    </header>
+
+                    <nav className="flex flex-wrap border-b border-purple-400/30 mb-6 -mx-1">
+                        <button onClick={() => setActiveUserTab('jadwal')} className={`px-4 py-2 rounded-t-lg mx-1 mb-[-1px] transition-colors ${activeUserTab === 'jadwal' ? 'bg-gray-700 text-purple-300 font-semibold border border-b-gray-700 border-purple-400/30' : 'text-gray-400 hover:bg-gray-700/50'}`}>Jadwal & Catatan</button>
+                        <button onClick={() => setActiveUserTab('tugas')} className={`px-4 py-2 rounded-t-lg mx-1 mb-[-1px] transition-colors ${activeUserTab === 'tugas' ? 'bg-gray-700 text-purple-300 font-semibold border border-b-gray-700 border-purple-400/30' : 'text-gray-400 hover:bg-gray-700/50'}`}>Tugas</button>
+                        <button onClick={() => setActiveUserTab('ai')} className={`flex items-center gap-2 px-4 py-2 rounded-t-lg mx-1 mb-[-1px] transition-colors ${activeUserTab === 'ai' ? 'bg-gray-700 text-purple-300 font-semibold border border-b-gray-700 border-purple-400/30' : 'text-gray-400 hover:bg-gray-700/50'}`}><GeminiIcon/> Asisten AI</button>
+                    </nav>
+
+                    <div>
+                        {activeUserTab === 'jadwal' && (
+                            <div>
+                                <h2 className="text-xl font-bold mb-4 text-white">Jadwal Pelajaran</h2>
+                                <div className="flex flex-wrap border-b border-purple-400/30 mb-4">
+                                    {DAYS.map(day => (
+                                        <button key={day} onClick={() => setActiveDay(day)} className={`px-4 py-2 font-medium transition-colors ${activeDay === day ? 'text-purple-300 border-b-2 border-purple-300' : 'text-gray-400'}`}>
+                                            {day}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="space-y-3">
+                                    {(userSchedule[activeDay] || []).length > 0 ? (
+                                        userSchedule[activeDay].map((entry, index) => (
+                                             <div key={index} className="p-3 bg-gray-700/80 rounded-lg flex items-center space-x-4">
+                                                 <div className="text-center w-20">
+                                                     <p className="font-bold text-purple-300">{entry.start}</p>
+                                                     <p className="text-xs text-gray-400">hingga</p>
+                                                     <p className="font-semibold text-purple-200">{entry.end}</p>
+                                                 </div>
+                                                 <div className="border-l-2 border-purple-400/50 pl-4 flex-1">
+                                                     <p className="font-bold text-lg text-white">{entry.subject}</p>
+                                                 </div>
+                                             </div>
+                                        ))
+                                    ) : (
+                                        <p className="text-gray-400 p-3 bg-gray-700/50 rounded-lg">Tidak ada jadwal untuk hari ini.</p>
+                                    )}
+                                </div>
+                                <div className="mt-6">
+                                    <h3 className="font-semibold text-lg mb-2 text-white">Catatan Pribadi untuk hari {activeDay}</h3>
+                                    <textarea value={note} onChange={e => setNote(e.target.value)} rows="3" className="w-full p-2 border border-gray-600 bg-gray-700 text-white rounded-md" placeholder="Tulis catatan di sini..."></textarea>
+                                    <button onClick={handleSaveNote} className="mt-2 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700">Simpan Catatan</button>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeUserTab === 'tugas' && (
+                             <div>
+                                 <h2 className="text-xl font-bold mb-4 text-white">Tugas</h2>
+                                 <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-2">
+                                    {userAssignments.length > 0 ? userAssignments.map(assignment => (
+                                        <div key={assignment.id} className="p-3 bg-gray-700/80 rounded-lg shadow">
+                                            <p className="font-bold text-white">{assignment.title}</p>
+                                            <p className="text-sm text-gray-300 mt-1 whitespace-pre-wrap">{assignment.content}</p>
+                                            <p className="text-xs text-gray-500 mt-2">Dibuat: {new Date(assignment.createdAt).toLocaleString('id-ID')}</p>
+                                        </div>
+                                    )) : <p className="text-gray-400">Tidak ada tugas.</p>}
+                                 </div>
+                             </div>
+                        )}
+                        
+                        {activeUserTab === 'ai' && (
+                            <AIAssistant showModal={showModal}/>
+                        )}
+                    </div>
+
+
+                    {/* Notifications Modal */}
+                    {showNotifications && (
+                        <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 p-4">
+                            <div className="bg-gray-800 border border-purple-400/50 rounded-lg shadow-xl p-6 w-full max-w-md">
+                                <div className="flex justify-between items-center mb-4">
+                                     <h3 className="text-xl font-bold text-white">Notifikasi</h3>
+                                     <button onClick={() => setShowNotifications(false)} className="text-gray-400 hover:text-white text-2xl font-bold">&times;</button>
+                                </div>
+                                <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2 mb-4">
+                                    {userNotifications.length > 0 ? userNotifications.map(n => (
+                                        <div key={n.id} className={`p-3 rounded-md flex justify-between items-center ${n.read ? 'bg-gray-700' : 'bg-blue-900/50'}`}>
+                                            <div>
+                                                <p className={`text-sm ${n.read ? 'text-gray-300' : 'text-blue-200 font-semibold'}`}>{n.message}</p>
+                                                <p className="text-xs text-gray-500 mt-1">{new Date(n.createdAt).toLocaleString('id-ID')}</p>
+                                            </div>
+                                            <button onClick={() => handleDeleteOneNotification(n.id)} className="text-red-400 hover:text-red-600 text-xl font-bold ml-3 px-2 rounded-full">&times;</button>
+                                        </div>
+                                    )) : <p className="text-gray-400 text-center py-4">Tidak ada notifikasi.</p>}
+                                </div>
+                                {userNotifications.length > 0 && (
+                                    <div className="pt-4 border-t border-purple-400/30">
+                                        {unreadCount > 0 && (
+                                            <button onClick={handleMarkNotificationsRead} className="w-full py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 mb-2">Tandai semua sudah dibaca</button>
+                                        )}
+                                        <button onClick={handleDeleteAllNotifications} className="w-full py-2 bg-red-600 text-white rounded-md hover:bg-red-700">Hapus Semua Notifikasi</button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // --- RENDER THE APP ---
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+
+    </script>
 </body>
 </html>
 
