@@ -75,48 +75,6 @@
     <script type="text/babel">
         const { useState, useEffect, useCallback, useMemo, useRef } = React;
 
-        // --- GEMINI API CALL UTILITY ---
-        const callGeminiApi = async (prompt, systemInstruction) => {
-            const apiKey = ""; // API key is handled by the environment
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-
-            const payload = {
-                contents: [{ parts: [{ text: prompt }] }],
-            };
-
-            if (systemInstruction) {
-                payload.systemInstruction = {
-                    parts: [{ text: systemInstruction }]
-                };
-            }
-
-            try {
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                });
-
-                if (!response.ok) {
-                    const errorBody = await response.json();
-                    throw new Error(`API Error: ${response.status} ${response.statusText} - ${errorBody.error.message}`);
-                }
-
-                const result = await response.json();
-                const candidate = result.candidates?.[0];
-
-                if (candidate && candidate.content?.parts?.[0]?.text) {
-                    return candidate.content.parts[0].text;
-                } else {
-                    return "Tidak ada respons yang valid dari AI.";
-                }
-            } catch (error) {
-                console.error("Error calling Gemini API:", error);
-                return `Terjadi kesalahan saat menghubungi AI: ${error.message}`;
-            }
-        };
-
-
         // --- SVG ICON COMPONENTS ---
         const StarLogo = () => (
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -128,19 +86,6 @@
             </defs>
             <path d="M12 2L14.09 8.26L20 9.27L15.55 13.97L16.91 20L12 16.54L7.09 20L8.45 13.97L4 9.27L9.91 8.26L12 2Z" fill="url(#goldGradient)" stroke="#FFC700" strokeWidth="0.5"/>
           </svg>
-        );
-
-        const GeminiIcon = () => (
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M5.99844 10.5C5.99844 6.358 9.35644 3 13.4984 3C16.5394 3 19.1974 4.851 20.2434 7.5H13.4984V10.5H21.4984C21.4984 10.83 21.4984 11.16 21.4984 11.49C21.4984 17.147 16.6454 21 10.9984 21C7.81844 21 4.98544 19.23 3.49844 16.5L5.99844 14.5C6.98544 16.14 8.84744 17.5 10.9984 17.5C14.2824 17.5 16.9984 14.811 16.9984 11.49H10.9984C7.81844 11.49 5.99844 10.5 5.99844 10.5Z" fill="url(#geminiGradient)"/>
-                <defs>
-                    <linearGradient id="geminiGradient" x1="3.49844" y1="3" x2="21.4984" y2="21" gradientUnits="userSpaceOnUse">
-                        <stop stopColor="#8E44AD"/>
-                        <stop offset="0.5" stopColor="#3498DB"/>
-                        <stop offset="1" stopColor="#2ECC71"/>
-                    </linearGradient>
-                </defs>
-            </svg>
         );
 
         const NotificationIcon = ({ count, onClick }) => (
@@ -875,21 +820,7 @@
             const [title, setTitle] = useState('');
             const [content, setContent] = useState('');
             const [selectedClass, setSelectedClass] = useState(CLASS_LIST[0]);
-            const [isGenerating, setIsGenerating] = useState(false);
-
-            const handleGenerateContent = async () => {
-                if (!title) {
-                    showModal('Silakan isi judul tugas terlebih dahulu untuk menghasilkan deskripsi AI.');
-                    return;
-                }
-                setIsGenerating(true);
-                const systemInstruction = "Anda adalah asisten guru. Buat deskripsi tugas yang jelas, singkat, dan mudah dipahami untuk siswa berdasarkan judul yang diberikan.";
-                const prompt = `Buat deskripsi tugas untuk judul: "${title}"`;
-                const aiContent = await callGeminiApi(prompt, systemInstruction);
-                setContent(aiContent);
-                setIsGenerating(false);
-            };
-        
+            
             const handleAddAssignment = (e) => {
                 e.preventDefault();
                 if (!title || !content) {
@@ -940,13 +871,7 @@
                                 <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="mt-1 block w-full p-2 border border-gray-600 bg-gray-700 text-white rounded-md"/>
                              </div>
                              <div>
-                                <div className="flex justify-between items-center">
-                                    <label className="block text-sm font-medium text-gray-300">Isi/Deskripsi Tugas</label>
-                                    <button type="button" onClick={handleGenerateContent} disabled={isGenerating} className="flex items-center space-x-2 text-sm text-purple-300 hover:text-purple-200 disabled:opacity-50">
-                                        <GeminiIcon />
-                                        <span>{isGenerating ? 'Membuat...' : 'Buat dengan AI'}</span>
-                                    </button>
-                                </div>
+                                <label className="block text-sm font-medium text-gray-300">Isi/Deskripsi Tugas</label>
                                 <textarea value={content} onChange={e => setContent(e.target.value)} rows="4" className="mt-1 block w-full p-2 border border-gray-600 bg-gray-700 text-white rounded-md"></textarea>
                              </div>
                              <div>
@@ -1004,63 +929,10 @@
             );
         }
 
-        // --- AI ASSISTANT COMPONENT FOR USER ---
-        function AIAssistant({ showModal }) {
-            const [prompt, setPrompt] = useState('');
-            const [response, setResponse] = useState('');
-            const [isLoading, setIsLoading] = useState(false);
-
-            const handleSubmit = async (e) => {
-                e.preventDefault();
-                if (!prompt.trim()) {
-                    showModal("Silakan tulis pertanyaan Anda terlebih dahulu.");
-                    return;
-                }
-                setIsLoading(true);
-                setResponse('');
-                const systemInstruction = "Anda adalah asisten AI yang ramah dan membantu untuk siswa. Jelaskan konsep-konsep sulit dengan cara yang mudah dimengerti. Berikan jawaban yang relevan dengan sekolah dan pembelajaran.";
-                const aiResponse = await callGeminiApi(prompt, systemInstruction);
-                setResponse(aiResponse);
-                setIsLoading(false);
-            };
-
-            return (
-                <div>
-                    <h2 className="text-xl font-bold mb-4 text-white">Asisten Belajar AI</h2>
-                    <div className="bg-gray-700/50 p-4 rounded-lg">
-                        <form onSubmit={handleSubmit}>
-                            <textarea
-                                value={prompt}
-                                onChange={(e) => setPrompt(e.target.value)}
-                                rows="4"
-                                className="w-full p-2 border border-gray-600 bg-gray-700 text-white rounded-md"
-                                placeholder="Tanyakan apa saja tentang pelajaranmu..."
-                            ></textarea>
-                            <button type="submit" disabled={isLoading} className="mt-2 w-full flex justify-center items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:bg-purple-800">
-                                <GeminiIcon />
-                                <span>{isLoading ? 'Sedang berpikir...' : 'Tanya pada AI'}</span>
-                            </button>
-                        </form>
-
-                        { (isLoading || response) && (
-                            <div className="mt-4 p-4 bg-gray-800 rounded-lg border border-purple-400/30">
-                                <h3 className="font-semibold text-purple-300 mb-2">Jawaban AI:</h3>
-                                {isLoading ? (
-                                    <p className="text-gray-400 animate-pulse">AI sedang menyiapkan jawaban...</p>
-                                ) : (
-                                    <p className="text-gray-200 whitespace-pre-wrap">{response}</p>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )
-        }
-
         // --- USER DASHBOARD ---
         function UserDashboard({ currentUser, db, updateDb, DAYS, onLogout, showModal }) {
             const today = useMemo(() => new Date().toLocaleDateString('id-ID', { weekday: 'long' }), []);
-            const [activeUserTab, setActiveUserTab] = useState('jadwal'); // jadwal, tugas, ai
+            const [activeUserTab, setActiveUserTab] = useState('jadwal'); // jadwal, tugas
             const [activeDay, setActiveDay] = useState(DAYS.includes(today) ? today : DAYS[0]);
             const [note, setNote] = useState('');
             const [showNotifications, setShowNotifications] = useState(false);
@@ -1138,7 +1010,6 @@
                     <nav className="flex flex-wrap border-b border-purple-400/30 mb-6 -mx-1">
                         <button onClick={() => setActiveUserTab('jadwal')} className={`px-4 py-2 rounded-t-lg mx-1 mb-[-1px] transition-colors ${activeUserTab === 'jadwal' ? 'bg-gray-700 text-purple-300 font-semibold border border-b-gray-700 border-purple-400/30' : 'text-gray-400 hover:bg-gray-700/50'}`}>Jadwal & Catatan</button>
                         <button onClick={() => setActiveUserTab('tugas')} className={`px-4 py-2 rounded-t-lg mx-1 mb-[-1px] transition-colors ${activeUserTab === 'tugas' ? 'bg-gray-700 text-purple-300 font-semibold border border-b-gray-700 border-purple-400/30' : 'text-gray-400 hover:bg-gray-700/50'}`}>Tugas</button>
-                        <button onClick={() => setActiveUserTab('ai')} className={`flex items-center gap-2 px-4 py-2 rounded-t-lg mx-1 mb-[-1px] transition-colors ${activeUserTab === 'ai' ? 'bg-gray-700 text-purple-300 font-semibold border border-b-gray-700 border-purple-400/30' : 'text-gray-400 hover:bg-gray-700/50'}`}><GeminiIcon/> Asisten AI</button>
                     </nav>
 
                     <div>
@@ -1193,9 +1064,6 @@
                              </div>
                         )}
                         
-                        {activeUserTab === 'ai' && (
-                            <AIAssistant showModal={showModal}/>
-                        )}
                     </div>
 
 
