@@ -96,8 +96,8 @@
 
         // --- SUPABASE CLIENT SETUP ---
         // GANTI DENGAN URL DAN KUNCI PROYEK SUPABASE ANDA
-        const SUPABASE_URL = "https://stxslaajmpnccwvbkfbd.supabase.co";
-        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN0eHNsYWFqbXBuY2N3dmJrZmJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI3NDQxMzAsImV4cCI6MjA3ODMyMDEzMH0.dEAOzzJuSiE9coXgsgVXJVM4xqtHHc0LywlcOwywYNo";
+        const SUPABASE_URL = "https://sbveamdvggdhkaswkgbd.supabase.co";
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNidmVhbWR2Z2dkaGthc3drZ2JkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI3NDUwNTcsImV4cCI6MjA3ODMyMTA1N30.SSbmFD7BxWTS4m0CsL3M5DYgzsUXqZDGgA_CPHrfKuk";
         
         // --- SVG ICON COMPONENTS ---
         const StarLogo = () => (
@@ -203,7 +203,10 @@
                     showModal("KESALAHAN KONFIGURASI: Harap set SUPABASE_URL dan SUPABASE_ANON_KEY di dalam kode index.html.");
                     console.error("KESALAHAN KONFIGURASI: Harap set SUPABASE_URL dan SUPABASE_ANON_KEY di dalam kode index.html.");
                 } else {
-                    const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                    // FIX: Babel yang berjalan di browser mungkin tidak langsung melihat
+                    // variabel global (supabase) yang dimuat oleh skrip lain.
+                    // Menggunakan 'window.supabase' membuatnya eksplisit.
+                    const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
                     setSupabase(client);
                     setIsSupabaseReady(true);
                 }
