@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aplikasi Jadwal Kelas</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Impor Supabase Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
     <style>
         /* A simple font to match the app's aesthetic */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
@@ -56,9 +60,25 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #6B7280; /* gray-500 */
         }
+        
+        /* Loading Spinner */
+        .loader {
+            width: 50px;
+            aspect-ratio: 1;
+            border-radius: 50%;
+            background: 
+                radial-gradient(farthest-side,#c084fc 94%,#0000) top/8px 8px no-repeat,
+                conic-gradient(#0000 30%,#c084fc);
+            -webkit-mask: radial-gradient(farthest-side,#0000 calc(100% - 8px),#000 0);
+            mask: radial-gradient(farthest-side,#0000 calc(100% - 8px),#000 0);
+            animation: l13 1s infinite linear;
+        }
+        @keyframes l13{ 
+            100%{transform: rotate(1turn)}
+        }
     </style>
 </head>
-<body>
+<body class="bg-gray-900">
     <div id="root"></div>
 
     <!-- React Libraries -->
@@ -74,6 +94,11 @@
 
     <script type="text/babel">
         const { useState, useEffect, useCallback, useMemo, useRef } = React;
+
+        // --- SUPABASE CLIENT SETUP ---
+        // GANTI DENGAN URL DAN KUNCI PROYEK SUPABASE ANDA
+        const SUPABASE_URL = "https://ttringszfrgjnbfgzfdj.supabase.co";
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR0cmluZ3N6ZnJnam5iZmd6ZmRqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI3NDc4NDgsImV4cCI6MjA3ODMyMzg0OH0.8tWK8_Ir9nccyoa66yHJzlJgShLa4ImZ7dUHRwKUxTk";
 
         // --- SVG ICON COMPONENTS ---
         const StarLogo = () => (
@@ -98,6 +123,13 @@
                         {count > 99 ? '99+' : count}
                     </span>
                 )}
+            </div>
+        );
+        
+        const LoadingScreen = () => (
+            <div className="flex flex-col items-center justify-center min-h-screen text-white">
+                <div className="loader"></div>
+                <p className="mt-4 text-lg text-gray-300">Memuat data...</p>
             </div>
         );
 
@@ -149,94 +181,22 @@
             return { ModalComponent, showModal };
         };
 
-        // --- INITIAL DATABASE SETUP ---
-        // IMPORTANT NOTE: Using localStorage is not suitable for a real multi-user application.
-        // Data is stored only on the client's browser and is not shared between users or devices.
-        // For a production application, a server-side database like Firebase, PostgreSQL, or MongoDB is required.
-        // Also, storing passwords in plaintext is a major security vulnerability. Passwords should always be hashed.
-        const useDatabase = () => {
-            const initializeData = () => {
-                console.log("Initializing database for the first time...");
-                // NOTE: Passwords are in plaintext for demonstration purposes only. NEVER do this in production.
-                const initialUsers = [
-                    { id: 1, username: 'superadmin', password: 'superadmin', role: 'admin', approved: true },
-                    { id: 2, username: 'admin', password: 'admin', role: 'admin', approved: true },
-                    { id: 3, username: 'XI-A_user', password: 'password', role: 'user', className: 'XI-A', approved: true },
-                ];
-                const initialSchedules = {
-                    'XI-A': {
-                        Senin: [{ start: '07:00', end: '08:30', subject: 'Matematika' }, { start: '08:30', end: '10:00', subject: 'Fisika' }],
-                        Selasa: [{ start: '07:00', end: '08:30', subject: 'Kimia' }],
-                    }
-                };
-                const initialAssignments = [
-                    { id: 1, title: 'Tugas Kalkulus', content: 'Kerjakan LKS hal 50.', className: 'XI-A', createdAt: new Date().toISOString() }
-                ];
-                const initialNotes = [
-                    { id: 1, userId: 3, date: 'Senin', content: 'Jangan lupa bawa kalkulator.' }
-                ];
-                const initialNotifications = [
-                     { id: 1, userId: 3, message: 'Tugas baru ditambahkan: Tugas Kalkulus', read: false, createdAt: new Date().toISOString() }
-                ];
-
-                localStorage.setItem('users', JSON.stringify(initialUsers));
-                localStorage.setItem('schedules', JSON.stringify(initialSchedules));
-                localStorage.setItem('assignments', JSON.stringify(initialAssignments));
-                localStorage.setItem('notes', JSON.stringify(initialNotes));
-                localStorage.setItem('pendingUsers', JSON.stringify([]));
-                localStorage.setItem('notifications', JSON.stringify(initialNotifications));
-                
-                return { 
-                    users: initialUsers, 
-                    schedules: initialSchedules, 
-                    assignments: initialAssignments, 
-                    notes: initialNotes, 
-                    pendingUsers: [],
-                    notifications: initialNotifications 
-                };
-            };
-
-            const loadData = (key, defaultValue = []) => {
-                try {
-                    const data = localStorage.getItem(key);
-                    return data ? JSON.parse(data) : defaultValue;
-                } catch (error) {
-                    console.error(`Error loading ${key} from localStorage`, error);
-                    return defaultValue;
-                }
-            };
-            
-            const [db, setDb] = useState(() => {
-                const isInitialized = localStorage.getItem('users');
-                if (!isInitialized) {
-                    return initializeData();
-                }
-                return {
-                    users: loadData('users'),
-                    schedules: loadData('schedules', {}),
-                    assignments: loadData('assignments'),
-                    notes: loadData('notes'),
-                    pendingUsers: loadData('pendingUsers'),
-                    notifications: loadData('notifications', []),
-                };
-            });
-
-            const updateDb = (key, data) => {
-                localStorage.setItem(key, JSON.stringify(data));
-                setDb(prevDb => ({ ...prevDb, [key]: data }));
-            };
-
-            return { db, updateDb };
-        };
-
-
         // --- MAIN APP COMPONENT ---
         function App() {
-            const { db, updateDb } = useDatabase();
+            const [supabase, setSupabase] = useState(null);
             const [currentUser, setCurrentUser] = useState(null);
             const [page, setPage] = useState('login');
             const [backgroundPos, setBackgroundPos] = useState(0);
             const { ModalComponent, showModal } = useModal();
+            const [isLoading, setIsLoading] = useState(true);
+            const [db, setDb] = useState({
+                users: [],
+                pendingUsers: [],
+                schedules: {},
+                assignments: [],
+                notes: [],
+                notifications: []
+            });
 
             const CLASS_LIST = useMemo(() => {
                 const grades = ['X', 'XI', 'XII'];
@@ -246,13 +206,140 @@
 
             const DAYS = useMemo(() => ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'], []);
 
+            // --- FUNGSI PENGAMBILAN DATA ---
+            const fetchUsers = async (client) => {
+                const { data, error } = await client.from('users').select('*');
+                if (error) {
+                    console.error('Error fetching users:', error);
+                    throw error;
+                }
+                setDb(prev => ({
+                    ...prev,
+                    users: data.filter(u => u.approved),
+                    pendingUsers: data.filter(u => !u.approved)
+                }));
+            };
+
+            const fetchSchedules = async (client) => {
+                const { data, error } = await client.from('schedules').select('*');
+                if (error) {
+                    console.error('Error fetching schedules:', error);
+                    throw error;
+                }
+                const schedulesObj = {};
+                data.forEach(item => { schedulesObj[item.className] = item.data; });
+                setDb(prev => ({ ...prev, schedules: schedulesObj }));
+            };
+
+            const fetchAssignments = async (client) => {
+                const { data, error } = await client.from('assignments').select('*');
+                if (error) {
+                    console.error('Error fetching assignments:', error);
+                    throw error;
+                }
+                setDb(prev => ({ ...prev, assignments: data }));
+            };
+
+            const fetchNotes = async (client) => {
+                const { data, error } = await client.from('notes').select('*');
+                if (error) {
+                    console.error('Error fetching notes:', error);
+                    throw error;
+                }
+                setDb(prev => ({ ...prev, notes: data }));
+            };
+
+            const fetchNotifications = async (client) => {
+                const { data, error } = await client.from('notifications').select('*');
+                if (error) {
+                    console.error('Error fetching notifications:', error);
+                    throw error;
+                }
+                setDb(prev => ({ ...prev, notifications: data }));
+            };
+            // --- END FUNGSI PENGAMBILAN DATA ---
+
+
+            // Efek untuk inisialisasi Supabase dan data
             useEffect(() => {
+                // Cek konfigurasi
+                if (SUPABASE_URL === "URL_PROYEK_SUPABASE_ANDA" || SUPABASE_ANON_KEY === "KUNCI_ANON_SUPABASE_ANDA") {
+                    console.error("KESALAHAN KONFIGURASI: Harap set SUPABASE_URL dan SUPABASE_ANON_KEY di dalam kode index.html.");
+                    showModal("KESALAHAN KONFIGURASI: Aplikasi belum terhubung ke database. Silakan ikuti panduan.");
+                    setIsLoading(false);
+                    return;
+                }
+                
+                // Gunakan window.supabase untuk memperbaiki masalah urutan load di GitHub Pages
+                const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                setSupabase(client);
+
+                // Ambil data awal
+                const fetchInitialData = async () => {
+                    setIsLoading(true);
+                    try {
+                        await Promise.all([
+                            fetchUsers(client),
+                            fetchSchedules(client),
+                            fetchAssignments(client),
+                            fetchNotes(client),
+                            fetchNotifications(client)
+                        ]);
+                    } catch (error) {
+                        console.error("Gagal memuat data awal:", error);
+                        showModal(`Gagal memuat data awal: ${error.message}`);
+                    } finally {
+                        setIsLoading(false);
+                    }
+                };
+                
+                fetchInitialData();
+
+                // Setup listener real-time
+                const subscriptions = [];
+                
+                subscriptions.push(
+                    client.from('users')
+                        .on('*', () => fetchUsers(client))
+                        .subscribe()
+                );
+                
+                subscriptions.push(
+                    client.from('schedules')
+                        .on('*', () => fetchSchedules(client))
+                        .subscribe()
+                );
+                
+                subscriptions.push(
+                    client.from('assignments')
+                        .on('*', () => fetchAssignments(client))
+                        .subscribe()
+                );
+                
+                subscriptions.push(
+                    client.from('notes')
+                        .on('*', () => fetchNotes(client))
+                        .subscribe()
+                );
+                
+                subscriptions.push(
+                    client.from('notifications')
+                        .on('*', () => fetchNotifications(client))
+                        .subscribe()
+                );
+
+                // Cek session user
                 const sessionUser = sessionStorage.getItem('currentUser');
                 if (sessionUser) {
                     const user = JSON.parse(sessionUser);
                     setCurrentUser(user);
                     setPage(user.role);
                 }
+
+                // Cleanup subscriptions
+                return () => {
+                    subscriptions.forEach(sub => sub.unsubscribe());
+                };
             }, []);
 
             const navigate = (newPage) => {
@@ -262,38 +349,71 @@
                 }
             };
 
-            const handleLogin = ({ username, password }) => {
-                const user = db.users.find(u => u.username === username && u.password === password);
-                if (user && user.approved) {
-                    setCurrentUser(user);
-                    sessionStorage.setItem('currentUser', JSON.stringify(user));
-                    navigate(user.role);
-                    return true;
+            const handleLogin = async ({ username, password }) => {
+                try {
+                    // PERINGATAN KEAMANAN: Password tidak di-hash!
+                    const { data, error } = await supabase
+                        .from('users')
+                        .select('*')
+                        .eq('username', username)
+                        .eq('password', password)
+                        .limit(1);
+
+                    if (error) throw error;
+
+                    const user = data[0];
+                    if (user && user.approved) {
+                        setCurrentUser(user);
+                        sessionStorage.setItem('currentUser', JSON.stringify(user));
+                        navigate(user.role);
+                        return true;
+                    } else if (user && !user.approved) {
+                         showModal('Akun Anda sedang menunggu persetujuan dari Admin.');
+                    } else {
+                        showModal('Username atau password salah.');
+                    }
+                } catch (error) {
+                    console.error('Login error:', error);
+                    showModal(`Login gagal: ${error.message}`);
                 }
-                showModal('Username atau password salah, atau akun belum disetujui.');
                 return false;
             };
             
-            const handleRegister = ({ username, password, className, role }) => {
-                if (db.users.some(u => u.username === username) || db.pendingUsers.some(u => u.username === username)) {
-                    showModal('Username sudah digunakan atau sedang dalam proses persetujuan.');
+            const handleRegister = async ({ username, password, className, role }) => {
+                try {
+                    // Cek duplikat username
+                    const { data: existingUser, error: selectError } = await supabase
+                        .from('users')
+                        .select('id')
+                        .eq('username', username)
+                        .limit(1);
+
+                    if (selectError) throw selectError;
+
+                    if (existingUser.length > 0) {
+                        showModal('Username sudah digunakan atau sedang dalam proses persetujuan.');
+                        return false;
+                    }
+                    
+                    const newUser = {
+                        username,
+                        password, // Password disimpan sebagai plaintext (TIDAK AMAN)
+                        role,
+                        className: role === 'user' ? className : null,
+                        approved: false // Registrasi baru harus disetujui
+                    };
+
+                    const { error: insertError } = await supabase.from('users').insert(newUser);
+                    if (insertError) throw insertError;
+
+                    showModal('Registrasi berhasil! Akun Anda sedang menunggu persetujuan dari Admin.');
+                    return true;
+
+                } catch (error) {
+                    console.error('Register error:', error);
+                    showModal(`Registrasi gagal: ${error.message}`);
                     return false;
                 }
-                
-                // NOTE: Using Date.now() is not a robust way to generate unique IDs in a real application.
-                // Consider using a library like UUID.
-                const newUser = {
-                    id: Date.now(),
-                    username,
-                    password,
-                    role,
-                    className: role === 'user' ? className : null,
-                    approved: false
-                };
-
-                updateDb('pendingUsers', [...db.pendingUsers, newUser]);
-                showModal('Registrasi berhasil! Akun Anda sedang menunggu persetujuan dari Admin.');
-                return true;
             };
 
             const handleLogout = () => {
@@ -304,12 +424,16 @@
             };
 
             const renderPage = () => {
+                if (isLoading) {
+                    return <LoadingScreen />;
+                }
+            
                 switch (page) {
                     case 'admin':
                         return <AdminDashboard 
                                 currentUser={currentUser} 
                                 db={db} 
-                                updateDb={updateDb} 
+                                supabase={supabase}
                                 CLASS_LIST={CLASS_LIST} 
                                 DAYS={DAYS} 
                                 onLogout={handleLogout} 
@@ -319,7 +443,7 @@
                         return <UserDashboard 
                                 currentUser={currentUser} 
                                 db={db} 
-                                updateDb={updateDb} 
+                                supabase={supabase}
                                 DAYS={DAYS} 
                                 onLogout={handleLogout}
                                 showModal={showModal}
@@ -355,27 +479,35 @@
             const [isRegister, setIsRegister] = useState(false);
             const [form, setForm] = useState({ username: '', password: '', className: CLASS_LIST[0], role: 'user' });
             const [confirmPassword, setConfirmPassword] = useState('');
+            const [isSubmitting, setIsSubmitting] = useState(false);
 
             const handleChange = (e) => {
                 const { name, value } = e.target;
                 setForm(prev => ({ ...prev, [name]: value }));
             };
 
-            const handleSubmit = (e) => {
+            const handleSubmit = async (e) => {
                 e.preventDefault();
+                if (isSubmitting) return;
+                setIsSubmitting(true);
+                
                 if (isRegister) {
                     if (form.password !== confirmPassword) {
                         showModal("Password tidak cocok!");
+                        setIsSubmitting(false);
                         return;
                     }
-                    if(onRegister(form)) {
+                    const success = await onRegister(form);
+                    if(success) {
                         setIsRegister(false);
                         setForm({ username: '', password: '', className: CLASS_LIST[0], role: 'user' });
                         setConfirmPassword('');
                     }
                 } else {
-                    onLogin(form);
+                    await onLogin(form);
                 }
+                
+                setIsSubmitting(false);
             };
 
             return (
@@ -405,8 +537,8 @@
                                     </>
                                 )}
                             </div>
-                            <button type="submit" className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 focus:ring-offset-gray-800 transition duration-150 ease-in-out">
-                                {isRegister ? 'Daftar' : 'Login'}
+                            <button type="submit" disabled={isSubmitting} className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 focus:ring-offset-gray-800 transition duration-150 ease-in-out disabled:bg-purple-800 disabled:cursor-not-allowed">
+                                {isSubmitting ? 'Memproses...' : (isRegister ? 'Daftar' : 'Login')}
                             </button>
                         </form>
 
@@ -422,23 +554,12 @@
         }
         
         // --- ADMIN DASHBOARD AND COMPONENTS ---
-        function AdminDashboard({ currentUser, db, updateDb, CLASS_LIST, DAYS, onLogout, showModal }) {
+        // Prop 'supabase' ditambahkan, 'updateDb' dihapus
+        function AdminDashboard({ currentUser, db, supabase, CLASS_LIST, DAYS, onLogout, showModal }) {
             const [activeTab, setActiveTab] = useState('approval');
 
-            const handleApproval = (userId, isApproved) => {
-                const userToProcess = db.pendingUsers.find(u => u.id === userId);
-                if (!userToProcess) return;
-
-                if (isApproved) {
-                    const approvedUser = { ...userToProcess, approved: true };
-                    updateDb('users', [...db.users, approvedUser]);
-                    showModal(`Registrasi ${userToProcess.username} disetujui.`);
-                } else {
-                    showModal(`Registrasi ${userToProcess.username} ditolak.`);
-                }
-                
-                updateDb('pendingUsers', db.pendingUsers.filter(u => u.id !== userId));
-            };
+            // Logika dipindahkan ke komponen anak
+            // handleApproval sekarang ada di RegistrationApproval
             
             return (
                 <div className="bg-gray-800/80 backdrop-blur-md rounded-2xl shadow-xl p-6 min-h-[calc(100vh-4rem)] border border-purple-400/30">
@@ -462,24 +583,44 @@
                     </nav>
 
                     <div className="transition-all duration-300">
-                        {activeTab === 'approval' && <RegistrationApproval currentUser={currentUser} pendingUsers={db.pendingUsers} onApprove={handleApproval} updateDb={updateDb} existingUsers={db.users} showModal={showModal}/>}
-                        {activeTab === 'user_management' && <UserManager currentUser={currentUser} db={db} updateDb={updateDb} CLASS_LIST={CLASS_LIST} showModal={showModal} />}
-                        {activeTab === 'schedule' && <ScheduleManager db={db} updateDb={updateDb} CLASS_LIST={CLASS_LIST} DAYS={DAYS} showModal={showModal} />}
-                        {activeTab === 'assignments' && <AssignmentManager db={db} updateDb={updateDb} CLASS_LIST={CLASS_LIST} showModal={showModal} />}
+                        {activeTab === 'approval' && <RegistrationApproval currentUser={currentUser} pendingUsers={db.pendingUsers} supabase={supabase} existingUsers={db.users} showModal={showModal}/>}
+                        {activeTab === 'user_management' && <UserManager currentUser={currentUser} db={db} supabase={supabase} CLASS_LIST={CLASS_LIST} showModal={showModal} />}
+                        {activeTab === 'schedule' && <ScheduleManager db={db} supabase={supabase} CLASS_LIST={CLASS_LIST} DAYS={DAYS} showModal={showModal} />}
+                        {activeTab === 'assignments' && <AssignmentManager db={db} supabase={supabase} CLASS_LIST={CLASS_LIST} showModal={showModal} />}
                         {activeTab === 'notes' && <UserNotesViewer notes={db.notes} users={db.users} />}
                     </div>
                 </div>
             );
         }
         
-        function RegistrationApproval({ currentUser, pendingUsers, onApprove, updateDb, existingUsers, showModal }) {
+        function RegistrationApproval({ currentUser, pendingUsers, supabase, existingUsers, showModal }) {
             const userFileInputRef = useRef(null);
             const [userFileName, setUserFileName] = useState('');
             const isSuperAdmin = currentUser.username === 'superadmin';
             const adminFileInputRef = useRef(null);
             const [adminFileName, setAdminFileName] = useState('');
+            const [isProcessing, setIsProcessing] = useState(false);
+            
+            const handleApproval = async (userId, username, isApproved) => {
+                try {
+                    if (isApproved) {
+                        const { error } = await supabase.from('users').update({ approved: true }).eq('id', userId);
+                        if (error) throw error;
+                        showModal(`Registrasi ${username} disetujui.`);
+                    } else {
+                        const { error } = await supabase.from('users').delete().eq('id', userId);
+                        if (error) throw error;
+                        showModal(`Registrasi ${username} ditolak.`);
+                    }
+                    // Data akan ter-update otomatis via real-time subscription
+                } catch (error) {
+                    console.error('Approval error:', error);
+                    showModal(`Gagal memproses persetujuan: ${error.message}`);
+                }
+            };
 
-            const processUserData = (data) => {
+            const processUserData = async (data) => {
+                setIsProcessing(true);
                 const newPendingUsers = [];
                 const allUsernames = new Set([...existingUsers.map(u => u.username), ...pendingUsers.map(u => u.username)]);
                 
@@ -487,7 +628,7 @@
                     const { username, password, className } = row;
                     if (username && password && className && !allUsernames.has(username)) {
                         newPendingUsers.push({
-                            id: Date.now() + Math.random(),
+                            // id dibuat oleh Supabase
                             username,
                             password: String(password),
                             className,
@@ -499,11 +640,16 @@
                 });
 
                 if (newPendingUsers.length > 0) {
-                    updateDb('pendingUsers', [...pendingUsers, ...newPendingUsers]);
-                    showModal(`${newPendingUsers.length} user baru dari file telah ditambahkan ke daftar persetujuan.`);
+                    const { error } = await supabase.from('users').insert(newPendingUsers);
+                    if (error) {
+                        showModal(`Gagal menambah user: ${error.message}`);
+                    } else {
+                        showModal(`${newPendingUsers.length} user baru dari file telah ditambahkan ke daftar persetujuan.`);
+                    }
                 } else {
                     showModal('Tidak ada user baru yang valid untuk ditambahkan. Pastikan file memiliki kolom header "username", "password", "className" dan tidak ada username yang duplikat.');
                 }
+                setIsProcessing(false);
             };
 
             const handleUserFileChange = (event) => {
@@ -528,7 +674,8 @@
                 setUserFileName('');
             };
             
-            const processAdminData = (data) => {
+            const processAdminData = async (data) => {
+                setIsProcessing(true);
                 const newPendingAdmins = [];
                 const allUsernames = new Set([...existingUsers.map(u => u.username), ...pendingUsers.map(u => u.username)]);
                 
@@ -536,7 +683,6 @@
                     const { username, password } = row;
                     if (username && password && !allUsernames.has(username)) {
                         newPendingAdmins.push({
-                            id: Date.now() + Math.random(),
                             username,
                             password: String(password),
                             className: null,
@@ -548,11 +694,16 @@
                 });
 
                 if (newPendingAdmins.length > 0) {
-                    updateDb('pendingUsers', [...pendingUsers, ...newPendingAdmins]);
-                    showModal(`${newPendingAdmins.length} admin baru dari file telah ditambahkan ke daftar persetujuan.`);
+                    const { error } = await supabase.from('users').insert(newPendingAdmins);
+                    if (error) {
+                         showModal(`Gagal menambah admin: ${error.message}`);
+                    } else {
+                        showModal(`${newPendingAdmins.length} admin baru dari file telah ditambahkan ke daftar persetujuan.`);
+                    }
                 } else {
                     showModal('Tidak ada admin baru yang valid untuk ditambahkan. Pastikan file memiliki kolom header "username" dan "password", dan tidak ada username yang duplikat.');
                 }
+                setIsProcessing(false);
             };
 
             const handleAdminFileChange = (event) => {
@@ -587,8 +738,10 @@
                                 Unggah file <strong>Excel (.xlsx, .xls)</strong>.
                                 Pastikan file memiliki kolom header: <strong>username, password, className</strong>.
                            </p>
-                           <input type="file" accept=".xlsx,.xls" ref={userFileInputRef} onChange={handleUserFileChange} className="hidden" id="user-file-importer" />
-                           <label htmlFor="user-file-importer" className="file-input-button bg-purple-600 hover:bg-purple-700">Pilih File User</label>
+                           <input type="file" accept=".xlsx,.xls" ref={userFileInputRef} onChange={handleUserFileChange} className="hidden" id="user-file-importer" disabled={isProcessing} />
+                           <label htmlFor="user-file-importer" className={`file-input-button ${isProcessing ? 'bg-gray-500' : 'bg-purple-600 hover:bg-purple-700'}`}>
+                                {isProcessing ? 'Memproses...' : 'Pilih File User'}
+                           </label>
                            {userFileName && <span className="file-input-label">{userFileName}</span>}
                      </div>
 
@@ -599,8 +752,10 @@
                                     Unggah file <strong>Excel (.xlsx, .xls)</strong>.
                                     Pastikan file memiliki kolom header: <strong>username, password</strong>.
                                </p>
-                               <input type="file" accept=".xlsx,.xls" ref={adminFileInputRef} onChange={handleAdminFileChange} className="hidden" id="admin-file-importer" />
-                               <label htmlFor="admin-file-importer" className="file-input-button bg-blue-600 hover:bg-blue-700">Pilih File Admin</label>
+                               <input type="file" accept=".xlsx,.xls" ref={adminFileInputRef} onChange={handleAdminFileChange} className="hidden" id="admin-file-importer" disabled={isProcessing} />
+                               <label htmlFor="admin-file-importer" className={`file-input-button ${isProcessing ? 'bg-gray-500' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                                    {isProcessing ? 'Memproses...' : 'Pilih File Admin'}
+                               </label>
                                {adminFileName && <span className="file-input-label">{adminFileName}</span>}
                          </div>
                     )}
@@ -617,9 +772,8 @@
                                     </p>
                                 </div>
                                 <div className="flex space-x-2 mt-2 sm:mt-0">
-                                    <button onClick={() => onApprove(user.id, true)} className="bg-green-600 text-white px-4 py-2 rounded-md text-sm hover:bg-green-700">Setujui</button>
-                                    <button onClick={() => onApprove(user.id, false)} className="bg-red-600 text-white px-4 py-2 rounded-md text-sm hover:bg-red-700">Tolak</button>
-
+                                    <button onClick={() => handleApproval(user.id, user.username, true)} className="bg-green-600 text-white px-4 py-2 rounded-md text-sm hover:bg-green-700">Setujui</button>
+                                    <button onClick={() => handleApproval(user.id, user.username, false)} className="bg-red-600 text-white px-4 py-2 rounded-md text-sm hover:bg-red-700">Tolak</button>
                                 </div>
                             </div>
                         )) : <p className="text-gray-400">Tidak ada pendaftaran yang menunggu persetujuan.</p>}
@@ -628,7 +782,7 @@
             );
         }
 
-        function UserManager({ currentUser, db, updateDb, CLASS_LIST, showModal }) {
+        function UserManager({ currentUser, db, supabase, CLASS_LIST, showModal }) {
             const [selectedClass, setSelectedClass] = useState('Semua Kelas');
             const [searchTerm, setSearchTerm] = useState('');
             const isSuperAdmin = currentUser.username === 'superadmin';
@@ -643,9 +797,14 @@
             const admins = useMemo(() => db.users.filter(user => user.role === 'admin'), [db.users]);
 
             const handleDeleteOne = (userId, username) => {
-                showModal(`Apakah Anda yakin ingin menghapus user: ${username}?`, () => {
-                    const updatedUsers = db.users.filter(user => user.id !== userId);
-                    updateDb('users', updatedUsers);
+                showModal(`Apakah Anda yakin ingin menghapus user: ${username}?`, async () => {
+                    try {
+                        const { error } = await supabase.from('users').delete().eq('id', userId);
+                        if (error) throw error;
+                        // Data ter-update via real-time
+                    } catch (error) {
+                        showModal(`Gagal menghapus user: ${error.message}`);
+                    }
                 });
             };
             
@@ -654,9 +813,16 @@
                     showModal('Silakan pilih kelas spesifik yang ingin dihapus.');
                     return;
                 }
-                showModal(`PERINGATAN: Anda akan menghapus SEMUA user dari kelas ${selectedClass}. Aksi ini tidak dapat dibatalkan. Lanjutkan?`, () => {
-                    const updatedUsers = db.users.filter(user => user.role !== 'user' || user.className !== selectedClass);
-                    updateDb('users', updatedUsers);
+                showModal(`PERINGATAN: Anda akan menghapus SEMUA user dari kelas ${selectedClass}. Aksi ini tidak dapat dibatalkan. Lanjutkan?`, async () => {
+                    try {
+                        const { error } = await supabase.from('users').delete()
+                            .eq('role', 'user')
+                            .eq('className', selectedClass);
+                        if (error) throw error;
+                        // Data ter-update via real-time
+                    } catch (error) {
+                        showModal(`Gagal menghapus user: ${error.message}`);
+                    }
                 });
             };
 
@@ -665,9 +831,14 @@
                     showModal('Tidak dapat menghapus superadmin.');
                     return;
                 }
-                 showModal(`Apakah Anda yakin ingin menghapus admin: ${adminUsername}?`, () => {
-                    const updatedUsers = db.users.filter(user => user.id !== adminId);
-                    updateDb('users', updatedUsers);
+                 showModal(`Apakah Anda yakin ingin menghapus admin: ${adminUsername}?`, async () => {
+                    try {
+                        const { error } = await supabase.from('users').delete().eq('id', adminId);
+                        if (error) throw error;
+                        // Data ter-update via real-time
+                    } catch (error) {
+                         showModal(`Gagal menghapus admin: ${error.message}`);
+                    }
                 });
             };
 
@@ -713,10 +884,11 @@
             );
         }
 
-        function ScheduleManager({ db, updateDb, CLASS_LIST, DAYS, showModal }) {
+        function ScheduleManager({ db, supabase, CLASS_LIST, DAYS, showModal }) {
             const [selectedClass, setSelectedClass] = useState(CLASS_LIST[0]);
             const [editingEntry, setEditingEntry] = useState(null); // { day, index, data }
             
+            // db.schedules sekarang diambil dari state real-time
             const classSchedule = useMemo(() => db.schedules[selectedClass] || {}, [db.schedules, selectedClass]);
             
             const handleAddEntry = (day) => {
@@ -728,11 +900,27 @@
                 setEditingEntry({ day, index, data: { ...entryData } });
             };
             
+            const updateScheduleForClass = async (newClassData) => {
+                try {
+                    // Upsert (update atau insert) jadwal untuk kelas ini
+                    const { error } = await supabase
+                        .from('schedules')
+                        .upsert({ className: selectedClass, data: newClassData }, { onConflict: 'className' });
+                        
+                    if (error) throw error;
+                    // Data ter-update via real-time
+                } catch (error) {
+                    console.error('Error updating schedule:', error);
+                    showModal(`Gagal menyimpan jadwal: ${error.message}`);
+                }
+            };
+            
             const handleDeleteEntry = (day, index) => {
                 showModal('Apakah Anda yakin ingin menghapus jadwal ini?', () => {
-                    const newSchedules = JSON.parse(JSON.stringify(db.schedules));
-                    newSchedules[selectedClass][day].splice(index, 1);
-                    updateDb('schedules', newSchedules);
+                    const newClassSchedule = { ...classSchedule };
+                    newClassSchedule[day].splice(index, 1);
+                    updateScheduleForClass(newClassSchedule);
+                    setEditingEntry(null);
                 });
             };
             
@@ -741,21 +929,23 @@
                     showModal('Nama mata pelajaran tidak boleh kosong.');
                     return;
                 }
-            
-                const newSchedules = JSON.parse(JSON.stringify(db.schedules));
-                if (!newSchedules[selectedClass]) newSchedules[selectedClass] = {};
-                if (!newSchedules[selectedClass][editingEntry.day]) newSchedules[selectedClass][editingEntry.day] = [];
+                
+                // Buat salinan dari jadwal kelas saat ini
+                const newClassSchedule = JSON.parse(JSON.stringify(classSchedule));
+                if (!newClassSchedule[editingEntry.day]) newClassSchedule[editingEntry.day] = [];
             
                 if (editingEntry.index !== undefined) { // Editing existing
-                    newSchedules[selectedClass][editingEntry.day][editingEntry.index] = editingEntry.data;
+                    newClassSchedule[editingEntry.day][editingEntry.index] = editingEntry.data;
                 } else { // Adding new
-                    newSchedules[selectedClass][editingEntry.day].push(editingEntry.data);
+                    newClassSchedule[editingEntry.day].push(editingEntry.data);
                 }
             
                 // Sort entries by start time
-                newSchedules[selectedClass][editingEntry.day].sort((a, b) => a.start.localeCompare(b.start));
-            
-                updateDb('schedules', newSchedules);
+                newClassSchedule[editingEntry.day].sort((a, b) => a.start.localeCompare(b.start));
+                
+                // Kirim seluruh data JSONb baru untuk kelas ini ke Supabase
+                updateScheduleForClass(newClassSchedule);
+                
                 setEditingEntry(null);
             };
             
@@ -824,48 +1014,72 @@
             );
         }
         
-        function AssignmentManager({ db, updateDb, CLASS_LIST, showModal }) {
+        function AssignmentManager({ db, supabase, CLASS_LIST, showModal }) {
             const [title, setTitle] = useState('');
             const [content, setContent] = useState('');
             const [selectedClass, setSelectedClass] = useState(CLASS_LIST[0]);
+            const [isSubmitting, setIsSubmitting] = useState(false);
 
-            const handleAddAssignment = (e) => {
+            const handleAddAssignment = async (e) => {
                 e.preventDefault();
                 if (!title || !content) {
                     showModal('Judul dan isi tugas tidak boleh kosong.');
                     return;
                 }
+                
+                setIsSubmitting(true);
             
                 const newAssignment = {
-                    id: Date.now(),
+                    // id akan dibuat oleh Supabase
                     title,
                     content,
                     className: selectedClass,
-                    createdAt: new Date().toISOString(),
+                    created_at: new Date().toISOString(),
                 };
             
-                const updatedAssignments = [...db.assignments, newAssignment];
-                updateDb('assignments', updatedAssignments);
+                try {
+                    // 1. Tambah tugas
+                    const { error: assignmentError } = await supabase.from('assignments').insert(newAssignment);
+                    if (assignmentError) throw assignmentError;
+                    
+                    // 2. Buat notifikasi untuk user di kelas tersebut
+                    const usersInClass = db.users.filter(u => u.className === selectedClass);
+                    if (usersInClass.length > 0) {
+                        const newNotifications = usersInClass.map(user => ({
+                            user_id: user.id,
+                            message: `Tugas baru untuk kelas ${selectedClass}: ${title}`,
+                            read: false,
+                            created_at: new Date().toISOString()
+                        }));
+                        
+                        const { error: notificationError } = await supabase.from('notifications').insert(newNotifications);
+                        if (notificationError) {
+                            console.error('Error creating notifications, but assignment was added:', notificationError);
+                            showModal('Tugas berhasil ditambahkan, tetapi notifikasi gagal dikirim.');
+                        }
+                    }
+                    
+                    showModal('Tugas berhasil ditambahkan.');
+                    setTitle('');
+                    setContent('');
                 
-                const usersInClass = db.users.filter(u => u.className === selectedClass);
-                const newNotifications = usersInClass.map(user => ({
-                    id: Date.now() + Math.random(),
-                    userId: user.id,
-                    message: `Tugas baru untuk kelas ${selectedClass}: ${title}`,
-                    read: false,
-                    createdAt: new Date().toISOString()
-                }));
-                updateDb('notifications', [...db.notifications, ...newNotifications]);
-            
-                showModal('Tugas berhasil ditambahkan.');
-                setTitle('');
-                setContent('');
+                } catch (error) {
+                    console.error('Error adding assignment:', error);
+                    showModal(`Gagal menambah tugas: ${error.message}`);
+                } finally {
+                     setIsSubmitting(false);
+                }
             };
             
             const handleDeleteAssignment = (id) => {
-                showModal('Apakah Anda yakin ingin menghapus tugas ini?', () => {
-                    const updatedAssignments = db.assignments.filter(a => a.id !== id);
-                    updateDb('assignments', updatedAssignments);
+                showModal('Apakah Anda yakin ingin menghapus tugas ini?', async () => {
+                    try {
+                        const { error } = await supabase.from('assignments').delete().eq('id', id);
+                        if (error) throw error;
+                        // Data ter-update via real-time
+                    } catch (error) {
+                         showModal(`Gagal menghapus tugas: ${error.message}`);
+                    }
                 });
             };
             
@@ -888,19 +1102,21 @@
                                         {CLASS_LIST.map(c => <option key={c} value={c}>{c}</option>)}
                                     </select>
                                 </div>
-                                <button type="submit" className="w-full bg-purple-600 text-white py-2 rounded-md hover:bg-purple-700">Tambah Tugas</button>
+                                <button type="submit" disabled={isSubmitting} className="w-full bg-purple-600 text-white py-2 rounded-md hover:bg-purple-700 disabled:bg-purple-800">
+                                    {isSubmitting ? 'Menyimpan...' : 'Tambah Tugas'}
+                                </button>
                         </form>
                     </div>
                     <div>
                         <h3 className="font-bold text-lg mb-4 text-white">Daftar Tugas</h3>
                         <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
-                             {db.assignments.length > 0 ? [...db.assignments].reverse().map(assignment => (
+                             {db.assignments.length > 0 ? [...db.assignments].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).map(assignment => (
                                 <div key={assignment.id} className="p-3 bg-gray-700 rounded-lg shadow">
                                     <div className="flex justify-between items-start">
                                         <div>
                                             <p className="font-bold text-white">{assignment.title} <span className="text-sm font-normal text-gray-400">- {assignment.className}</span></p>
                                             <p className="text-sm text-gray-300 mt-1 whitespace-pre-wrap">{assignment.content}</p>
-                                            <p className="text-xs text-gray-500 mt-2">Dibuat: {new Date(assignment.createdAt).toLocaleString('id-ID')}</p>
+                                            <p className="text-xs text-gray-500 mt-2">Dibuat: {new Date(assignment.created_at).toLocaleString('id-ID')}</p>
                                         </div>
                                         <button onClick={() => handleDeleteAssignment(assignment.id)} className="text-red-400 hover:text-red-300 text-sm p-2 rounded-md hover:bg-gray-800">Hapus</button>
                                     </div>
@@ -915,9 +1131,10 @@
         function UserNotesViewer({ notes, users }) {
              const notesWithUsernames = useMemo(() => {
                 return notes.map(note => {
-                    const user = users.find(u => u.id === note.userId);
+                    // Gunakan user_id dari tabel notes
+                    const user = users.find(u => u.id === note.user_id);
                     return { ...note, username: user ? user.username : 'User tidak diketahui', className: user ? user.className : '-' };
-                }).reverse();
+                }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
             }, [notes, users]);
             
             return (
@@ -938,7 +1155,7 @@
         }
 
         // --- USER DASHBOARD ---
-        function UserDashboard({ currentUser, db, updateDb, DAYS, onLogout, showModal }) {
+        function UserDashboard({ currentUser, db, supabase, DAYS, onLogout, showModal }) {
             const today = useMemo(() => new Date().toLocaleDateString('id-ID', { weekday: 'long' }), []);
             const [activeUserTab, setActiveUserTab] = useState('jadwal'); // jadwal, tugas
             const [activeDay, setActiveDay] = useState(DAYS.includes(today) ? today : DAYS[0]);
@@ -946,9 +1163,9 @@
             const [showNotifications, setShowNotifications] = useState(false);
 
             const userSchedule = useMemo(() => db.schedules[currentUser.className] || {}, [db.schedules, currentUser.className]);
-            const userAssignments = useMemo(() => [...db.assignments].filter(a => a.className === currentUser.className).reverse(), [db.assignments, currentUser.className]);
-            const userNotes = useMemo(() => db.notes.filter(n => n.userId === currentUser.id), [db.notes, currentUser.id]);
-            const userNotifications = useMemo(() => db.notifications.filter(n => n.userId === currentUser.id).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)), [db.notifications, currentUser.id]);
+            const userAssignments = useMemo(() => [...db.assignments].filter(a => a.className === currentUser.className).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)), [db.assignments, currentUser.className]);
+            const userNotes = useMemo(() => db.notes.filter(n => n.user_id === currentUser.id), [db.notes, currentUser.id]);
+            const userNotifications = useMemo(() => db.notifications.filter(n => n.user_id === currentUser.id).sort((a,b) => new Date(b.created_at) - new Date(a.created_at)), [db.notifications, currentUser.id]);
             const unreadCount = useMemo(() => userNotifications.filter(n => !n.read).length, [userNotifications]);
 
             useEffect(() => {
@@ -958,44 +1175,68 @@
                 }
             }, [activeDay, userNotes, activeUserTab]);
 
-            const handleSaveNote = () => {
-                const existingNoteIndex = db.notes.findIndex(n => n.userId === currentUser.id && n.date === activeDay);
-                let updatedNotes = [...db.notes];
-                if (existingNoteIndex > -1) {
-                    if (note.trim() === '') {
-                        updatedNotes.splice(existingNoteIndex, 1);
+            const handleSaveNote = async () => {
+                try {
+                    const noteContent = note.trim();
+                    if (noteContent === '') {
+                        // Hapus catatan jika kosong
+                        const { error } = await supabase.from('notes')
+                            .delete()
+                            .eq('user_id', currentUser.id)
+                            .eq('date', activeDay);
+                        if (error) throw error;
+                        showModal(`Catatan untuk hari ${activeDay} berhasil dihapus.`);
                     } else {
-                        updatedNotes[existingNoteIndex].content = note;
+                        // Upsert (update atau insert) catatan
+                        const { error } = await supabase.from('notes').upsert(
+                            { 
+                                user_id: currentUser.id, 
+                                date: activeDay, 
+                                content: noteContent 
+                            },
+                            { onConflict: 'user_id,date' } // Pastikan ada UNIQUE constraint di database
+                        );
+                        if (error) throw error;
+                        showModal(`Catatan untuk hari ${activeDay} berhasil disimpan.`);
                     }
-                } else if (note.trim() !== '') {
-                    updatedNotes.push({
-                        id: Date.now(),
-                        userId: currentUser.id,
-                        date: activeDay,
-                        content: note,
-                    });
+                } catch (error) {
+                    console.error('Error saving note:', error);
+                    showModal(`Gagal menyimpan catatan: ${error.message}`);
                 }
-                updateDb('notes', updatedNotes);
-                showModal(`Catatan untuk hari ${activeDay} berhasil disimpan.`);
             };
             
-            const handleMarkNotificationsRead = () => {
-                const updatedNotifications = db.notifications.map(n => 
-                    n.userId === currentUser.id ? { ...n, read: true } : n
-                );
-                updateDb('notifications', updatedNotifications);
+            const handleMarkNotificationsRead = async () => {
+                try {
+                    const { error } = await supabase.from('notifications')
+                        .update({ read: true })
+                        .eq('user_id', currentUser.id)
+                        .eq('read', false);
+                    if (error) throw error;
+                    // Data ter-update via real-time
+                } catch (error) {
+                     showModal(`Gagal menandai notifikasi: ${error.message}`);
+                }
             };
 
-            const handleDeleteOneNotification = (notificationId) => {
-                const updatedNotifications = db.notifications.filter(n => n.id !== notificationId);
-                updateDb('notifications', updatedNotifications);
+            const handleDeleteOneNotification = async (notificationId) => {
+                try {
+                    const { error } = await supabase.from('notifications').delete().eq('id', notificationId);
+                    if (error) throw error;
+                    // Data ter-update via real-time
+                } catch (error) {
+                     showModal(`Gagal menghapus notifikasi: ${error.message}`);
+                }
             };
 
             const handleDeleteAllNotifications = () => {
-                showModal('Apakah Anda yakin ingin menghapus semua notifikasi Anda?', () => {
-                    const updatedNotifications = db.notifications.filter(n => n.userId !== currentUser.id);
-                    updateDb('notifications', updatedNotifications);
-                    setShowNotifications(false); // Close modal after deletion
+                showModal('Apakah Anda yakin ingin menghapus semua notifikasi Anda?', async () => {
+                    try {
+                        const { error } = await supabase.from('notifications').delete().eq('user_id', currentUser.id);
+                        if (error) throw error;
+                        setShowNotifications(false); // Close modal after deletion
+                    } catch (error) {
+                         showModal(`Gagal menghapus semua notifikasi: ${error.message}`);
+                    }
                 });
             };
 
@@ -1065,7 +1306,7 @@
                                         <div key={assignment.id} className="p-3 bg-gray-700/80 rounded-lg shadow">
                                             <p className="font-bold text-white">{assignment.title}</p>
                                             <p className="text-sm text-gray-300 mt-1 whitespace-pre-wrap">{assignment.content}</p>
-                                            <p className="text-xs text-gray-500 mt-2">Dibuat: {new Date(assignment.createdAt).toLocaleString('id-ID')}</p>
+                                            <p className="text-xs text-gray-500 mt-2">Dibuat: {new Date(assignment.created_at).toLocaleString('id-ID')}</p>
                                         </div>
                                     )) : <p className="text-gray-400">Tidak ada tugas.</p>}
                                 </div>
@@ -1088,7 +1329,7 @@
                                         <div key={n.id} className={`p-3 rounded-md flex justify-between items-center ${n.read ? 'bg-gray-700' : 'bg-blue-900/50'}`}>
                                             <div>
                                                 <p className={`text-sm ${n.read ? 'text-gray-300' : 'text-blue-200 font-semibold'}`}>{n.message}</p>
-                                                <p className="text-xs text-gray-500 mt-1">{new Date(n.createdAt).toLocaleString('id-ID')}</p>
+                                                <p className="text-xs text-gray-500 mt-1">{new Date(n.created_at).toLocaleString('id-ID')}</p>
                                             </div>
                                             <button onClick={() => handleDeleteOneNotification(n.id)} className="text-red-400 hover:text-red-600 text-xl font-bold ml-3 px-2 rounded-full">&times;</button>
                                         </div>
